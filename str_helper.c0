@@ -1,0 +1,17 @@
+#use <string>
+
+bool str_is_whitespace(char chr) {
+    return chr == ' ' || chr == '\n' || chr == '\t';
+}
+
+bool str_is_digit(char chr) {
+    int ascii = char_ord(chr);
+    return ascii >= 48 && ascii < 48 + 10;
+}
+
+bool str_is_hex(char chr) {
+    int ascii = char_ord(chr);
+    return ascii >= 48 && ascii < 48 + 10
+        || ascii >= 97 && ascii < 97 + 6
+        || ascii >= 65 && ascii < 65 + 6;
+}
