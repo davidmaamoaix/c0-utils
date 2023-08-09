@@ -81,6 +81,9 @@ bool re_parse_group(string regex, int *pc, re_state_t *s, re_state_t *e)
         if (!re_consume(')', regex, pc)) return false;
     } else if (peek == '[') {
         // TODO: do the class thingy
+    } else if (peek == '?' || peek == '+' || peek == '*') {
+        println("Regex Syntax Error: misplaced '?', '*' or '+'");
+        return false;
     } else {
         (*pc)++;
         if (peek == '\\') {
@@ -93,7 +96,7 @@ bool re_parse_group(string regex, int *pc, re_state_t *s, re_state_t *e)
         s->n_edges++;
     }
 
-    return false;
+    return true;
 }
 
 // term := group | group postfix
@@ -156,13 +159,24 @@ re_state_t *re_parse_regex(string regex) {
     re_state_t *end = re_new_state(true);
 
     int *pc = alloc(int);
-    if (!re_parse_or(regex, pc, start, end) || *pc != string_length(regex)) {
+
+    if (!re_parse_or(regex, pc, start, end)) {
         return NULL;
     }
+
+    if (*pc != string_length(regex)) {
+        print("Regex Syntax Error: parse ended at char ");
+        printint(*pc);
+        printchar('\n');
+        return NULL;
+    }
+
     return start;
 }
 
 int main() {
-    string a = "";
+    re_state_t *re = re_parse_regex("hello|world(yay)+|");
+    printbool(re == NULL);
+
     return 69;
 }
