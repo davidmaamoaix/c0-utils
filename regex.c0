@@ -34,6 +34,11 @@ struct re_state_t {
 };
 typedef struct re_state_t re_state_t;
 
+bool re_parse_or(string regex, int *pc, re_state_t *s, re_state_t *e);
+bool re_parse_seq(string regex, int *pc, re_state_t *s, re_state_t *e);
+bool re_parse_term(string regex, int *pc, re_state_t *s, re_state_t *e);
+bool re_parse_group(string regex, int *pc, re_state_t *s, re_state_t *e);
+
 re_state_t *re_new_state(bool is_term_state) {
     re_state_t *state = alloc(re_state_t);
     state->is_term_state = is_term_state;
@@ -43,10 +48,78 @@ re_state_t *re_new_state(bool is_term_state) {
     return state;
 }
 
+bool re_is_sep_char(string regex, int *pc)
+//@requires *pc <= string_length(regex);
+{
+    if (*pc == string_length(regex)) return true;
+
+    char peek = string_charat(regex, *pc);
+    return peek == ')' || peek == '|';
+}
+
+bool re_consume(char expect, string regex, int *pc)
+//@requires *pc < string_length(regex);
+{
+    bool match = string_charat(regex, *pc) == expect;
+    if (match) (*pc)++;
+    return match;
+}
+
+void re_add_epsilon(re_state_t *s, re_state_t *e) {
+    s->edges[s->n_edges].is_epsilon = true;
+    s->edges[s->n_edges].target = e;
+    s->n_edges++;
+}
+
+bool re_parse_group(string regex, int *pc, re_state_t *s, re_state_t *e)
+//@requires *pc < string_length(regex);
+{
+    char peek = string_charat(regex, *pc);
+    if (peek == '(') {
+        (*pc)++;
+        if (!re_parse_or(regex, pc, s, e)) return false;
+        if (!re_consume(')', regex, pc)) return false;
+    } else if (peek == '[') {
+        // TODO: do the class thingy
+    } else {
+        (*pc)++;
+        if (peek == '\\') {
+            peek = string_charat(regex, *pc);
+            (*pc)++;
+        }
+
+        s->edges[s->n_edges].bucket_set = alloc_array(bool, 128);
+        s->edges[s->n_edges].bucket_set[char_ord(peek)] = true;
+        s->n_edges++;
+    }
+
+    return false;
+}
+
 // term := group | group postfix
 bool re_parse_term(string regex, int *pc, re_state_t *s, re_state_t *e)
 //@requires *pc < string_length(regex);
 {
+    // in case of '+', the same edge needs to be generated twice
+    int pc_store = *pc;
+    if (!re_parse_group(regex, pc, s, e)) return false;
+
+    if (*pc == string_length(regex)) return true;
+    char peek = string_charat(regex, *pc);
+    if (peek == '?') {
+        re_add_epsilon(s, e);
+        (*pc)++;
+    } else if (peek == '+') {
+        *pc = pc_store;
+        if (!re_parse_group(regex, pc, e, e)) return false;
+        (*pc)++;
+    } else if (peek == '*') {
+        *pc = pc_store;
+        if (!re_parse_group(regex, pc, e, e)) return false;
+        re_add_epsilon(s, e);
+        (*pc)++;
+    }
+
     return true;
 }
 
@@ -54,23 +127,8 @@ bool re_parse_term(string regex, int *pc, re_state_t *s, re_state_t *e)
 bool re_parse_seq(string regex, int *pc, re_state_t *s, re_state_t *e)
 //@requires *pc <= string_length(regex);
 {
-    bool epsilon = false;
-    if (*pc == string_length(regex)) {
-        epsilon = true;
-    } else {
-        char peek = string_charat(regex, *pc);
-        if (peek == ')' || peek == '|') epsilon = true;
-
-        if (peek == '+' || peek == '*' || peek == '?') {
-            println("Regex Syntax Error: quantifier on empty string");
-            return false;
-        }
-    }
-
-    if (epsilon) {
-        s->edges[s->n_edges].is_epsilon = true;
-        s->edges[s->n_edges].target = e;
-        s->n_edges++;
+    if (re_is_sep_char(regex, pc)) {
+        re_add_epsilon(s, e);
         return true;
     }
 
