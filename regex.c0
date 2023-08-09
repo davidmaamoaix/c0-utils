@@ -1,0 +1,110 @@
+#use <conio>
+#use <string>
+
+/*
+    Walmart version of a regex matcher. Only supports the following regex:
+        - character classes (e.g. '[a-zA-Z0-9_]', '[^a-z]')
+        - choice '|'
+        - match any '.'
+        - match one or more '+'
+        - match any times '*'
+        - optional '?'
+    (TODO: do the "match m-n occurences" thing)
+
+    Some notes:
+        - all quantifiers are greedy
+        - everything only works on ASCII inputs
+        - capturing group also doesn't exist (parentheses are used for operator
+        precedence only)
+*/
+
+struct re_state_t;
+
+struct re_edge_t {
+    bool is_epsilon;
+    struct re_state_t *target;
+    bool[] bucket_set;
+};
+typedef struct re_edge_t re_edge_t;
+
+struct re_state_t {
+    bool is_term_state;
+    int n_edges;
+    re_edge_t[] edges;
+};
+typedef struct re_state_t re_state_t;
+
+re_state_t *re_new_state(bool is_term_state) {
+    re_state_t *state = alloc(re_state_t);
+    state->is_term_state = is_term_state;
+    state->n_edges = 0;
+    state->edges = alloc_array(re_edge_t, 64);
+
+    return state;
+}
+
+// term := group | group postfix
+bool re_parse_term(string regex, int *pc, re_state_t *s, re_state_t *e)
+//@requires *pc < string_length(regex);
+{
+    return true;
+}
+
+// seq := term | term seq | ''
+bool re_parse_seq(string regex, int *pc, re_state_t *s, re_state_t *e)
+//@requires *pc <= string_length(regex);
+{
+    bool epsilon = false;
+    if (*pc == string_length(regex)) {
+        epsilon = true;
+    } else {
+        char peek = string_charat(regex, *pc);
+        if (peek == ')' || peek == '|') epsilon = true;
+
+        if (peek == '+' || peek == '*' || peek == '?') {
+            println("Regex Syntax Error: quantifier on empty string");
+            return false;
+        }
+    }
+
+    if (epsilon) {
+        s->edges[s->n_edges].is_epsilon = true;
+        s->edges[s->n_edges].target = e;
+        s->n_edges++;
+        return true;
+    }
+
+    re_state_t *next = re_new_state(false);
+    if (!re_parse_term(regex, pc, s, next)) return false;
+
+    return re_parse_seq(regex, pc, next, e);
+}
+
+// or := seq | seq '|' or
+bool re_parse_or(string regex, int *pc, re_state_t *s, re_state_t *e)
+//@requires *pc <= string_length(regex);
+{
+    if (!re_parse_seq(regex, pc, s, e)) return false;
+    while (*pc < string_length(regex) && string_charat(regex, *pc) == '|') {
+        (*pc)++;
+        if (!re_parse_seq(regex, pc, s, e)) return false;
+    }
+
+    return true;
+}
+
+re_state_t *re_parse_regex(string regex) {
+    re_state_t *start = re_new_state(false);
+    re_state_t *end = re_new_state(true);
+
+    int *pc = alloc(int);
+    if (!re_parse_or(regex, pc, start, end) || *pc != string_length(regex)) {
+        return NULL;
+    }
+    return start;
+}
+
+int main() {
+    string a = "";
+    return 69;
+}
