@@ -251,7 +251,8 @@ void re_print_dfa(re_regex_t *re) {
 }
 
 int main() {
-    re_regex_t *re = re_parse_regex("abc|def");
+    // TODO: fix merging of "next states" by adding one more epsilon after ?+*
+    re_regex_t *re = re_parse_regex("abc|def+");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
