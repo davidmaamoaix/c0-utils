@@ -12,7 +12,6 @@ typedef struct reader_t reader_t;
 
 struct token_t {
     /*
-        0: lexer error
         1: keyword
         2: identifier
         3: operator
@@ -28,28 +27,76 @@ bool r_eof(reader_t *reader) {
     return reader->curr_pos == reader->length;
 }
 
-char r_peek_char(reader_t *reader)
-//@requires reader->curr_pos < reader->length;
-{
-    return string_charat(reader->content, reader->curr_pos);
+bool r_valid_offset(reader_t *reader, int offset) {
+    return reader->curr_pos + offset < reader->length;
 }
 
-void r_next_char(reader_t *reader)
-//@requires reader->curr_pos + 1 <= reader->length;
+char r_peek_char_offset(reader_t *reader, int offset)
+//@requires reader->curr_pos + offset < reader->length;
 {
-    reader->curr_pos++;
+    return string_charat(reader->content, reader->curr_pos + offset);
+}
+
+char r_peek_char(reader_t *reader) {
+    return r_peek_char_offset(reader, 0);
+}
+
+void r_skip_char(reader_t *reader, int offset)
+//@requires reader->curr_pos + offset <= reader->length;
+{
+    reader->curr_pos += offset;
+}
+
+void r_next_char(reader_t *reader) {
+    r_skip_char(reader, 1);
 }
 
 void r_trim(reader_t *reader) {
-    while (!r_eof(reader) && str_is_whitespace(r_peek_char(reader))) {
+    while (!r_eof(reader) && chr_is_whitespace(r_peek_char(reader))) {
         r_next_char(reader);
     }
 }
 
+string r_substring(reader_t *reader, int length)
+//@requires reader->curr_pos + length <= reader->length;
+{
+    return string_sub(
+        reader->content,
+        reader->curr_pos,
+        reader->curr_pos + length
+    );
+}
+
 bool l_next_token(reader_t *reader, token_t *tok)
+//@requires !r_eof(reader);
+//@requires !chr_is_whitespace(r_peek_char(reader));
 {   
-    // identifier & keyword
-    //if ()
+    char lookahead = r_peek_char(reader);
+    int token_end = 1; // exclusive
+
+    // identifier & keyword & some literals
+    if (chr_is_alpha(lookahead) || lookahead == '_') {
+        while (
+            r_valid_offset(reader, token_end) &&
+            chr_is_iden(r_peek_char_offset(reader, token_end), false)
+        ) {
+            token_end++;
+        }
+
+        tok->type = 2;
+
+    // hex | '0'
+    } else if (lookahead == '0') {
+        if (r_valid_offset(reader, token_end)) {
+            // TODO: this
+        }
+
+        tok->type = 5;
+    }
+
+    string token_str = r_substring(reader, token_end);
+    r_skip_char(reader, token_end);
+
     return true;
 }
 
@@ -64,12 +111,21 @@ int l_lex(reader_t *reader, token_t[] tokens) {
         tokens[n_tokens].type = tok->type;
         tokens[n_tokens].token = tok->token;
         n_tokens++;
+        r_trim(reader);
     }
 
     return n_tokens;
 }
 
 int main() {
+    string content = "abc def ghi jk";
+    reader_t *reader = alloc(reader_t);
+    reader->content = content;
+    reader->curr_pos = 0;
+    reader->length = 14;
+
+    token_t[] tokens = alloc_array(token_t, 6969);
+    int len = l_lex(reader, tokens);
     
     return 69;
 }
