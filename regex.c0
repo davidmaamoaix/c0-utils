@@ -147,22 +147,43 @@ bool re_parse_term(string regex, int *pc, re_state_t *s, re_state_t *e, int *ctx
 {
     // in case of '+', the same edge needs to be generated twice
     int pc_store = *pc;
-    if (!re_parse_atom(regex, pc, s, e, ctx)) return false;
+    int *dummy_ctx = alloc(int);
+    re_state_t *dummy_s = re_new_state(dummy_ctx, false);
+    re_state_t *dummy_e = re_new_state(dummy_ctx, false);
+    if (!re_parse_atom(regex, pc, dummy_s, dummy_e, dummy_ctx)) return false;
 
-    if (*pc == string_length(regex)) return true;
+    if (*pc == string_length(regex)) {
+        *pc = pc_store;
+        return re_parse_atom(regex, pc, s, e, ctx);
+    }
+
     char peek = string_charat(regex, *pc);
+    *pc = pc_store;
     if (peek == '?') {
         re_add_epsilon(s, e);
+        if (!re_parse_atom(regex, pc, s, e, ctx)) return false;
         (*pc)++;
     } else if (peek == '+') {
+        re_state_t *interm = re_new_state(ctx, false);
+
         *pc = pc_store;
-        if (!re_parse_atom(regex, pc, e, e, ctx)) return false;
+        if (!re_parse_atom(regex, pc, s, interm, ctx)) return false;
+        *pc = pc_store;
+        if (!re_parse_atom(regex, pc, interm, interm, ctx)) return false;
+
+        re_add_epsilon(interm, e);
         (*pc)++;
     } else if (peek == '*') {
+        re_state_t *interm = re_new_state(ctx, false);
         *pc = pc_store;
-        if (!re_parse_atom(regex, pc, e, e, ctx)) return false;
-        re_add_epsilon(s, e);
+        if (!re_parse_atom(regex, pc, interm, interm, ctx)) return false;
+
+        re_add_epsilon(s, interm);
+        re_add_epsilon(interm, e);
         (*pc)++;
+    } else {
+        *pc = pc_store;
+        if(!re_parse_atom(regex, pc, s, e, ctx)) return false;
     }
 
     return true;
@@ -232,27 +253,76 @@ re_regex_t *re_parse_regex(string regex) {
     return dfa;
 }
 
-void re_print_state(re_state_t *state, bool[] visited) {
+void re_print_char(char chr) {
+    if (chr == ' ') {
+        print("<space>");
+    } else if (chr == '\t') {
+        print("<tab>");
+    } else if (chr == '\n') {
+        print("<br>");
+    }
+    printchar(chr);
+}
+
+void re_print_state(re_state_t *state, bool[] visited, int n_states) {
     if (visited[state->state_id]) return;
     visited[state->state_id] = true;
 
     print("State ");
     printint(state->state_id);
-    println("");
+    if (state->is_term_state) print(" (FINISH)");
+    println(":");
 
+    if (state->n_edges == 0) {
+        println("\t(No out-going transitions)");
+    } else {
+        bool[] state_bucket = alloc_array(bool, n_states);
+        bool[][] trans_bucket = alloc_array(bool[], n_states);
+
+        for (int i = 0; i < state->n_edges; i++) {
+            int to = state->edges[i].target->state_id;
+            state_bucket[to] = true;
+            trans_bucket[to] = alloc_array(bool, 128);
+
+            for (int chr = 0; chr < 128; chr++) {
+                if (state->edges[i].bucket_set[chr]) {
+                    trans_bucket[to][chr] = true;
+                }
+            }
+        }
+
+        for (int i = 0; i < n_states; i++) {
+            if (state_bucket[i]) {
+                print("\tState ");
+                printint(i);
+                print(": ");
+
+                for (int chr = 0; chr < 128; chr++) {
+                    if (trans_bucket[i][chr]) {
+                        re_print_char(char_chr(chr));
+                        print(" ");
+                    }
+                }
+
+                println("");
+            }
+        }
+    }
+
+    println("");
     for (int i = 0; i < state->n_edges; i++) {
-        re_print_state(state->edges[i].target, visited);
+        re_print_state(state->edges[i].target, visited, n_states);
     }
 }
 
 void re_print_dfa(re_regex_t *re) {
     bool[] visited = alloc_array(bool, re->n_states);
-    re_print_state(re->head, visited);
+    re_print_state(re->head, visited, re->n_states);
 }
 
 int main() {
     // TODO: fix merging of "next states" by adding one more epsilon after ?+*
-    re_regex_t *re = re_parse_regex("abc|def+");
+    re_regex_t *re = re_parse_regex("a|b");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
