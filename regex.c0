@@ -253,15 +253,17 @@ re_regex_t *re_parse_regex(string regex) {
     return dfa;
 }
 
-void re_print_char(char chr) {
-    if (chr == ' ') {
-        print("<space>");
-    } else if (chr == '\t') {
-        print("<tab>");
-    } else if (chr == '\n') {
-        print("<br>");
+void re_print_char(int ord) {
+    if (ord == 128) {
+        // 128 reserved for epsilon
+        print("<epsilon>");
+    } else {
+        char chr = char_chr(ord);
+        if (chr == ' ') print("<space>");
+        else if (chr == '\t') print("<tab>");
+        else if (chr == '\n') print("<br>");
+        else printchar(chr);
     }
-    printchar(chr);
 }
 
 void re_print_state(re_state_t *state, bool[] visited, int n_states) {
@@ -281,12 +283,19 @@ void re_print_state(re_state_t *state, bool[] visited, int n_states) {
 
         for (int i = 0; i < state->n_edges; i++) {
             int to = state->edges[i].target->state_id;
-            state_bucket[to] = true;
-            trans_bucket[to] = alloc_array(bool, 128);
+            if (!state_bucket[to]) {
+                state_bucket[to] = true;
+                // 128 ASCII + 1 reserved for epsilon
+                trans_bucket[to] = alloc_array(bool, 129);
+            }
 
-            for (int chr = 0; chr < 128; chr++) {
-                if (state->edges[i].bucket_set[chr]) {
-                    trans_bucket[to][chr] = true;
+            if (state->edges[i].is_epsilon) {
+                trans_bucket[to][128] = true;
+            } else {
+                for (int chr = 0; chr < 128; chr++) {
+                    if (state->edges[i].bucket_set[chr]) {
+                        trans_bucket[to][chr] = true;
+                    }
                 }
             }
         }
@@ -296,10 +305,9 @@ void re_print_state(re_state_t *state, bool[] visited, int n_states) {
                 print("\tState ");
                 printint(i);
                 print(": ");
-
-                for (int chr = 0; chr < 128; chr++) {
+                for (int chr = 0; chr < 129; chr++) {
                     if (trans_bucket[i][chr]) {
-                        re_print_char(char_chr(chr));
+                        re_print_char(chr);
                         print(" ");
                     }
                 }
@@ -316,13 +324,19 @@ void re_print_state(re_state_t *state, bool[] visited, int n_states) {
 }
 
 void re_print_dfa(re_regex_t *re) {
+    print("Printing DFA with ");
+    printint(re->n_states);
+    println(" States");
+
     bool[] visited = alloc_array(bool, re->n_states);
     re_print_state(re->head, visited, re->n_states);
+
+    println("END OF DFA");
 }
 
 int main() {
-    // TODO: fix merging of "next states" by adding one more epsilon after ?+*
-    re_regex_t *re = re_parse_regex("a|b");
+    // TODO: parse error on single char before '|'
+    re_regex_t *re = re_parse_regex("a*d");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
