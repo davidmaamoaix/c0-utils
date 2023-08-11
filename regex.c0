@@ -24,66 +24,79 @@
         precedence only)
 */
 
-struct re_state_t;
+struct re_node_t;
 
 struct re_edge_t {
     bool is_epsilon;
-    struct re_state_t *target;
+    struct re_node_t *target;
     bool[] bucket_set;
 };
 typedef struct re_edge_t re_edge_t;
 
-struct re_state_t {
+struct re_node_t {
     int state_id;
     bool is_term_state;
     int n_edges;
     re_edge_t[] edges;
 };
-typedef struct re_state_t re_state_t;
+typedef struct re_node_t re_node_t;
 
 struct re_ctx_t {
     int pc;
     string regex;
     int n_states;
-    // bool is_dummy; // used for debugging
+    re_node_t *[] states;
+    bool is_dummy;
 };
 typedef struct re_ctx_t re_ctx_t;
 
-struct re_regex_t {
+struct re_dfa_t {
     int n_states;
-    re_state_t *head;
+    re_node_t *[] states;
+    re_node_t *head;
 };
-typedef struct re_regex_t re_regex_t;
+typedef struct re_dfa_t re_dfa_t;
 
-bool re_parse_or(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
-bool re_parse_seq(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
-bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
-bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
-bool re_parse_class(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
+struct re_state_t {
+    int[][] edges; // edges[ord][<number of to-states>]
+    int[] n_edges; // n_edges[ord] = <number of resulting states>
+};
+typedef struct re_state_t re_state_t;
+
+bool re_parse_or(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
+bool re_parse_seq(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
+bool re_parse_term(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
+bool re_parse_atom(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
+bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
 
 // dumb shorthand since expression in an assertion must be pure
 void re_assert(bool cond) {
     //@assert cond;
 }
 
-re_state_t *re_new_state(re_ctx_t *ctx, bool is_term_state) {
-    re_state_t *state = alloc(re_state_t);
+re_node_t *re_new_state(re_ctx_t *ctx, bool is_term_state) {
+    re_node_t *state = alloc(re_node_t);
     state->state_id = ctx->n_states;
     ctx->n_states++;
     state->is_term_state = is_term_state;
     state->n_edges = 0;
     state->edges = alloc_array(re_edge_t, 64);
 
+    // record state into id -> state mapping
+    if (!ctx->is_dummy) {
+        ctx->states[state->state_id] = state;
+    }
+
     return state;
 }
 
-re_ctx_t *re_clone_ctx(re_ctx_t *real_ctx) {
-    re_ctx_t *clone = alloc(re_ctx_t);
-    clone->n_states = 0;
-    clone->regex = real_ctx->regex;
-    clone->pc = real_ctx->pc;
-    // clone->is_dummy = real_ctx->is_dummy;
-    return clone;
+re_ctx_t *re_dummy_ctx(re_ctx_t *real_ctx) {
+    re_ctx_t *dummy = alloc(re_ctx_t);
+    dummy->n_states = 0;
+    dummy->regex = real_ctx->regex;
+    dummy->pc = real_ctx->pc;
+    dummy->is_dummy = true;
+    return dummy;
 }
 
 bool re_eof_ctx(re_ctx_t *ctx)
@@ -130,7 +143,7 @@ bool re_consume(char expect, re_ctx_t *ctx)
     return match;
 }
 
-void re_add_epsilon(re_state_t *s, re_state_t *e) {
+void re_add_epsilon(re_node_t *s, re_node_t *e) {
     s->edges[s->n_edges].is_epsilon = true;
     s->edges[s->n_edges].target = e;
     s->n_edges++;
@@ -147,7 +160,7 @@ bool re_consume_class_char(re_ctx_t *ctx, char *out) {
 
         peek = re_peek_ctx(ctx);
         ctx->pc++;
-        if (peek != ']' || peek != '-' || peek != '^') {
+        if (peek != ']' && peek != '-' && peek != '^' && peek != '\\') {
             print("Regex Syntax Error: unexpected escaped char '");
             printchar(peek);
             println("' in character class, expecting ']', '-' or '^'");
@@ -165,7 +178,31 @@ void re_char_bucket_invert(bool[] bucket)
     for (int i = 0; i < 128; i++) bucket[i] = !bucket[i];
 }
 
-bool re_parse_class(re_ctx_t *ctx, re_state_t *s, re_state_t *e) {
+void re_char_bucket_digits(bool[] bucket)
+//@requires \length(bucket) == 128;
+{
+    for (int i = 48; i < 48 + 10; i++) bucket[i] = true;
+}
+
+void re_char_bucket_alpha(bool[] bucket)
+//@requires \length(bucket) == 128;
+{
+    for (int i = 65; i < 65 + 26; i++) bucket[i] = true;
+    for (int i = 97; i < 97 + 26; i++) bucket[i] = true;
+}
+
+void re_char_bucket_whitespace(bool[] bucket)
+//@requires \length(bucket) == 128;
+{
+    bucket[char_ord(' ')] = true;
+    bucket[char_ord('\f')] = true;
+    bucket[char_ord('\n')] = true;
+    bucket[char_ord('\r')] = true;
+    bucket[char_ord('\t')] = true;
+    bucket[char_ord('\v')] = true;
+}
+
+bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e) {
     re_consume('[', ctx);
 
     if (re_eof_ctx(ctx)) {
@@ -221,7 +258,7 @@ bool re_parse_class(re_ctx_t *ctx, re_state_t *s, re_state_t *e) {
     return true;
 }
 
-bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
+bool re_parse_atom(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
 //@requires !re_eof_ctx(ctx);
 {
     char peek = re_peek_ctx(ctx);
@@ -236,6 +273,8 @@ bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
         return false;
     } else {
         ctx->pc++;
+
+        bool[] bucket = alloc_array(bool, 128);
         if (peek == '\\') {
             peek = re_peek_ctx(ctx);
             // TODO: add special characters such as '\d', ''
@@ -243,18 +282,45 @@ bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
                 peek != '+' && peek != '.' && peek != '*' &&
                 peek != '?' && peek != '|' && peek != '\\' &&
                 peek != '(' && peek != ')' && peek != '[' &&
-                peek != ']'
+                peek != ']' && peek != 'd' && peek != 'D' &&
+                peek != 'w' && peek != 'W' && peek != 's' &&
+                peek != 'S'
             ) {
                 print("Regex Syntax Error: invalid escaped char '\\");
                 printchar(peek);
                 println("'");
                 return false;
             }
+
+            if (peek == 'd') {
+                re_char_bucket_digits(bucket);
+            } else if (peek == 'D') {
+                re_char_bucket_digits(bucket);
+                re_char_bucket_invert(bucket);
+            } else if (peek == 'w') {
+                bucket[char_ord('_')] = true;
+                re_char_bucket_alpha(bucket);
+                re_char_bucket_digits(bucket);
+            } else if (peek == 'W') {
+                bucket[char_ord('_')] = true;
+                re_char_bucket_alpha(bucket);
+                re_char_bucket_digits(bucket);
+                re_char_bucket_invert(bucket);
+            } else if (peek == 's') {
+                re_char_bucket_whitespace(bucket);
+            } else if (peek == 'S') {
+                re_char_bucket_whitespace(bucket);
+                re_char_bucket_invert(bucket);
+            } else {
+                bucket[char_ord(peek)] = true;
+            }
+
             ctx->pc++;
+        } else {
+            bucket[char_ord(peek)] = true;
         }
 
-        s->edges[s->n_edges].bucket_set = alloc_array(bool, 128);
-        s->edges[s->n_edges].bucket_set[char_ord(peek)] = true;
+        s->edges[s->n_edges].bucket_set = bucket;
         s->edges[s->n_edges].target = e;
         s->n_edges++;
     }
@@ -263,14 +329,13 @@ bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
 }
 
 // term := group | group postfix
-bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
+bool re_parse_term(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
 //@requires !re_eof_ctx(ctx);
 {
     // in case of '+', the same edge needs to be generated twice
-    re_ctx_t *dummy_ctx = re_clone_ctx(ctx);
-    // dummy_ctx->is_dummy = true;
-    re_state_t *dummy_s = re_new_state(dummy_ctx, false);
-    re_state_t *dummy_e = re_new_state(dummy_ctx, false);
+    re_ctx_t *dummy_ctx = re_dummy_ctx(ctx);
+    re_node_t *dummy_s = re_new_state(dummy_ctx, false);
+    re_node_t *dummy_e = re_new_state(dummy_ctx, false);
     if (!re_parse_atom(dummy_ctx, dummy_s, dummy_e)) return false;
 
     if (re_eof_ctx(dummy_ctx)) {
@@ -283,7 +348,7 @@ bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
         re_assert(re_parse_atom(ctx, s, e));
         ctx->pc++;
     } else if (peek == '+') {
-        re_state_t *interm = re_new_state(ctx, false);
+        re_node_t *interm = re_new_state(ctx, false);
 
         int pc_store = ctx->pc;
         re_assert(re_parse_atom(ctx, s, interm));
@@ -293,7 +358,7 @@ bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
         re_add_epsilon(interm, e);
         ctx->pc++;
     } else if (peek == '*') {
-        re_state_t *interm = re_new_state(ctx, false);
+        re_node_t *interm = re_new_state(ctx, false);
         re_assert(re_parse_atom(ctx, interm, interm));
         
         re_add_epsilon(s, interm);
@@ -307,7 +372,7 @@ bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
 }
 
 // seq := term | term seq | ''
-bool re_parse_seq(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
+bool re_parse_seq(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
 //@requires ctx->pc <= string_length(ctx->regex);
 {
     if (re_is_sep_char(ctx)) {
@@ -316,22 +381,21 @@ bool re_parse_seq(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
     }
     
     // ugly backtracking to eliminate one unnecessary epsilon transition
-    re_ctx_t *dummy_ctx = re_clone_ctx(ctx);
-    // dummy_ctx->is_dummy = true;
-    re_state_t *dummy_s = re_new_state(dummy_ctx, false);
-    re_state_t *dummy_e = re_new_state(dummy_ctx, false);
+    re_ctx_t *dummy_ctx = re_dummy_ctx(ctx);
+    re_node_t *dummy_s = re_new_state(dummy_ctx, false);
+    re_node_t *dummy_e = re_new_state(dummy_ctx, false);
     if (!re_parse_term(dummy_ctx, dummy_s, dummy_e)) return false;
 
     if (re_is_sep_char(dummy_ctx)) {
         return re_parse_term(ctx, s, e);
     } else {
-        re_state_t *next = re_new_state(ctx, false);
+        re_node_t *next = re_new_state(ctx, false);
         return re_parse_term(ctx, s, next) && re_parse_seq(ctx, next, e);
     }
 }
 
 // or := seq | seq '|' or
-bool re_parse_or(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
+bool re_parse_or(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
 //@requires ctx->pc <= string_length(ctx->regex);
 {
     if (!re_parse_seq(ctx, s, e)) return false;
@@ -343,13 +407,14 @@ bool re_parse_or(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
     return true;
 }
 
-re_regex_t *re_parse_regex(string regex) {
+re_dfa_t *re_parse_regex(string regex) {
     re_ctx_t *ctx = alloc(re_ctx_t);
     ctx->n_states = 0;
+    ctx->states = alloc_array(re_node_t *, 6969);
     ctx->pc = 0;
     ctx->regex = regex;
-    re_state_t *start = re_new_state(ctx, false);
-    re_state_t *end = re_new_state(ctx, true);
+    re_node_t *start = re_new_state(ctx, false);
+    re_node_t *end = re_new_state(ctx, true);
 
     if (!re_parse_or(ctx, start, end)) {
         return NULL;
@@ -362,8 +427,9 @@ re_regex_t *re_parse_regex(string regex) {
         return NULL;
     }
 
-    re_regex_t *dfa = alloc(re_regex_t);
+    re_dfa_t *dfa = alloc(re_dfa_t);
     dfa->n_states = ctx->n_states;
+    dfa->states = ctx->states;
     dfa->head = start;
 
     return dfa;
@@ -382,7 +448,7 @@ void re_print_char(int ord) {
     }
 }
 
-void re_print_state(re_state_t *state, bool[] visited, int n_states) {
+void re_print_state(re_node_t *state, bool[] visited, int n_states) {
     if (visited[state->state_id]) return;
     visited[state->state_id] = true;
 
@@ -439,7 +505,7 @@ void re_print_state(re_state_t *state, bool[] visited, int n_states) {
     }
 }
 
-void re_print_dfa(re_regex_t *re) {
+void re_print_dfa(re_dfa_t *re) {
     print("Printing DFA with ");
     printint(re->n_states);
     println(" States");
@@ -450,13 +516,29 @@ void re_print_dfa(re_regex_t *re) {
     println("END OF DFA");
 }
 
+/*
+    Matches the given regular expression object on the start of the given input.
+    Returns the location in the string at which the regular expression matching
+    ends.
+
+    Example:
+        re = "a(b|c)d"
+        input = "acdef"
+        This returns 3 as the DFA ends on character 'e' in the input.
+*/
+int re_regex_match(re_dfa_t *re, string input) {
+    int n_active = 1;
+    bool[] active = alloc_array(bool, re->n_states);
+
+    return 0;
+}
+
 int main() {
-    // TODO: parse error on single char before '|'
-    re_regex_t *re = re_parse_regex("a[bcd]e");
+    re_dfa_t *re = re_parse_regex("a[a-s]");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
     re_print_dfa(re);
 
-    return 69;
+    return 0;
 }
