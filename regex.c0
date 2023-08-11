@@ -265,6 +265,7 @@ bool re_parse_class(re_ctx_t *ctx, int from, int to) {
         re_state_t *from_state = ctx->states[from];
         for (int chr = 0; chr < 128; chr++) {
             if (char_bucket[chr]) {
+                re_lazy_init_transition(from_state, chr);
                 from_state->edges[chr][from_state->n_edges[chr]] = to;
                 from_state->n_edges[chr]++;
             }
@@ -565,7 +566,7 @@ int re_regex_match(re_dfa_t *re, string input) {
 }
 
 int main() {
-    re_dfa_t *re = re_parse_regex("abc*|def+");
+    re_dfa_t *re = re_parse_regex("a[a-zA-Z]f");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
