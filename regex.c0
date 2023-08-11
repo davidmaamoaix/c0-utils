@@ -3,13 +3,13 @@
 
 /*
     Walmart version of a regex matcher. Only supports the following regex:
-        - character classes (e.g. '[a-zA-Z0-9_]', '[^a-z]')
+        - character class (e.g. '[a-zA-Z0-9_]', '[^a-z]', '[531-]')
         - choice '|'
         - match any '.'
         - match one or more '+'
         - match any times '*'
         - optional '?'
-        - shorthands '\d', '\D', '\w', '\W', '\s', '\S'
+        - shorthands: '\d', '\D', '\w', '\W', '\s', '\S'
     (TODO: do the "match m-n occurences" thing)
 
     Some notes:
@@ -60,6 +60,11 @@ bool re_parse_seq(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
 bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
 bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
 bool re_parse_class(re_ctx_t *ctx, re_state_t *s, re_state_t *e);
+
+// dumb shorthand since expression in an assertion must be pure
+void re_assert(bool cond) {
+    //@assert cond;
+}
 
 re_state_t *re_new_state(re_ctx_t *ctx, bool is_term_state) {
     re_state_t *state = alloc(re_state_t);
@@ -131,8 +136,89 @@ void re_add_epsilon(re_state_t *s, re_state_t *e) {
     s->n_edges++;
 }
 
+bool re_consume_class_char(re_ctx_t *ctx, char *out) {
+    char peek = re_peek_ctx(ctx);
+    ctx->pc++;
+    if (peek == '\\') {
+        if (re_eof_ctx(ctx)) {
+            println("Regex Syntax Error: unexpected EOF at escaped char");
+            return false;
+        }
+
+        peek = re_peek_ctx(ctx);
+        ctx->pc++;
+        if (peek != ']' || peek != '-' || peek != '^') {
+            print("Regex Syntax Error: unexpected escaped char '");
+            printchar(peek);
+            println("' in character class, expecting ']', '-' or '^'");
+            return false;
+        }
+    }
+
+    *out = peek;
+    return true;
+}
+
+void re_char_bucket_invert(bool[] bucket)
+//@requires \length(bucket) == 128;
+{
+    for (int i = 0; i < 128; i++) bucket[i] = !bucket[i];
+}
+
 bool re_parse_class(re_ctx_t *ctx, re_state_t *s, re_state_t *e) {
-    return false;
+    re_consume('[', ctx);
+
+    if (re_eof_ctx(ctx)) {
+        println("Regex Syntax Error: unexpected EOF before closing ']'");
+        return false;
+    }
+
+    bool inverted = false;
+    if (re_peek_ctx(ctx) == '^') {
+        inverted = true;
+        ctx->pc++;
+    }
+
+    bool[] char_bucket = alloc_array(bool, 128);
+    while (!re_eof_ctx(ctx) && re_peek_ctx(ctx) != ']') {
+        char *peek_ptr = alloc(char);
+        if (!re_consume_class_char(ctx, peek_ptr)) return false;
+
+        // parse character range
+        if (
+            ctx->pc + 1 < string_length(ctx->regex) &&
+            re_peek_ctx(ctx) == '-' &&
+            string_charat(ctx->regex, ctx->pc + 1) != ']'
+        ) {
+            ctx->pc++;
+            char *to_ptr = alloc(char);
+            if (!re_consume_class_char(ctx, to_ptr)) return false;
+            
+            int from = char_ord(*peek_ptr);
+            int to = char_ord(*to_ptr);
+            if (to < from) {
+                print("Regex Syntax Error: bad character range [");
+                printchar(*peek_ptr);
+                printchar('-');
+                printchar(*to_ptr);
+                println("]");
+            }
+
+            for (int i = from; i <= to; i++) {
+                char_bucket[i] = true;
+            }
+        } else {
+            char_bucket[char_ord(*peek_ptr)] = true;
+        }
+    }
+
+    if (inverted) re_char_bucket_invert(char_bucket);
+    s->edges[s->n_edges].bucket_set = char_bucket;
+    s->edges[s->n_edges].target = e;
+    s->n_edges++;
+
+    re_consume(']', ctx);
+    return true;
 }
 
 bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
@@ -144,7 +230,7 @@ bool re_parse_atom(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
         if (!re_parse_or(ctx, s, e)) return false;
         if (!re_consume(')', ctx)) return false;
     } else if (peek == '[') {
-        // TODO: do the class thingy
+        if (!re_parse_class(ctx, s, e)) return false;
     } else if (peek == '?' || peek == '+' || peek == '*') {
         println("Regex Syntax Error: misplaced '?', '*' or '+'");
         return false;
@@ -194,27 +280,27 @@ bool re_parse_term(re_ctx_t *ctx, re_state_t *s, re_state_t *e)
     char peek = re_peek_ctx(dummy_ctx);
     if (peek == '?') {
         re_add_epsilon(s, e);
-        if (!re_parse_atom(ctx, s, e)) return false;
+        re_assert(re_parse_atom(ctx, s, e));
         ctx->pc++;
     } else if (peek == '+') {
         re_state_t *interm = re_new_state(ctx, false);
 
         int pc_store = ctx->pc;
-        if (!re_parse_atom(ctx, s, interm)) return false;
+        re_assert(re_parse_atom(ctx, s, interm));
         ctx->pc = pc_store;
-        if (!re_parse_atom(ctx, interm, interm)) return false;
+        re_assert(re_parse_atom(ctx, interm, interm));
 
         re_add_epsilon(interm, e);
         ctx->pc++;
     } else if (peek == '*') {
         re_state_t *interm = re_new_state(ctx, false);
-        if (!re_parse_atom(ctx, interm, interm)) return false;
+        re_assert(re_parse_atom(ctx, interm, interm));
         
         re_add_epsilon(s, interm);
         re_add_epsilon(interm, e);
         ctx->pc++;
     } else {
-        if(!re_parse_atom(ctx, s, e)) return false;
+        re_assert(re_parse_atom(ctx, s, e));
     }
 
     return true;
@@ -366,7 +452,7 @@ void re_print_dfa(re_regex_t *re) {
 
 int main() {
     // TODO: parse error on single char before '|'
-    re_regex_t *re = re_parse_regex("a*|b*|d");
+    re_regex_t *re = re_parse_regex("a[bcd]e");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
