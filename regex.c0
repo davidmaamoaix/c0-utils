@@ -33,71 +33,78 @@ struct re_edge_t {
 };
 typedef struct re_edge_t re_edge_t;
 
-struct re_node_t {
+/*struct re_node_t {
     int state_id;
     bool is_term_state;
     int n_edges;
     re_edge_t[] edges;
 };
-typedef struct re_node_t re_node_t;
-
-struct re_ctx_t {
-    int pc;
-    string regex;
-    int n_states;
-    re_node_t *[] states;
-    bool is_dummy;
-};
-typedef struct re_ctx_t re_ctx_t;
-
-struct re_dfa_t {
-    int n_states;
-    re_node_t *[] states;
-    re_node_t *head;
-};
-typedef struct re_dfa_t re_dfa_t;
+typedef struct re_node_t re_node_t;*/
 
 struct re_state_t {
+    bool is_term_state;
     int[][] edges; // edges[ord][<number of to-states>]
     int[] n_edges; // n_edges[ord] = <number of resulting states>
 };
 typedef struct re_state_t re_state_t;
 
-bool re_parse_or(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
-bool re_parse_seq(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
-bool re_parse_term(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
-bool re_parse_atom(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
-bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e);
+struct re_ctx_t {
+    int pc;
+    string regex;
+    int n_states;
+    re_state_t *[] states;
+
+    bool is_test; // true if doing lookahead; do not alter ctx
+};
+typedef struct re_ctx_t re_ctx_t;
+
+struct re_dfa_t {
+    int n_states;
+    re_state_t *[] states;
+};
+typedef struct re_dfa_t re_dfa_t;
+
+bool re_parse_or(re_ctx_t *ctx, int from, int to);
+bool re_parse_seq(re_ctx_t *ctx, int from, int to);
+bool re_parse_term(re_ctx_t *ctx, int from, int to);
+bool re_parse_atom(re_ctx_t *ctx, int from, int to);
+bool re_parse_class(re_ctx_t *ctx, int from, int to);
 
 // dumb shorthand since expression in an assertion must be pure
 void re_assert(bool cond) {
     //@assert cond;
 }
 
-re_node_t *re_new_state(re_ctx_t *ctx, bool is_term_state) {
-    re_node_t *state = alloc(re_node_t);
-    state->state_id = ctx->n_states;
-    ctx->n_states++;
+int re_new_state(re_ctx_t *ctx, bool is_term_state) {
+    if (ctx->is_test) return -1;
+
+    int state_id = ctx->n_states;
+    re_state_t *state = alloc(re_state_t);
     state->is_term_state = is_term_state;
-    state->n_edges = 0;
-    state->edges = alloc_array(re_edge_t, 64);
+    state->edges = alloc_array(int[], 129); // 128 for ASCII, 1 for epsilon
+    state->n_edges = alloc_array(int, 129);
 
     // record state into id -> state mapping
-    if (!ctx->is_dummy) {
-        ctx->states[state->state_id] = state;
-    }
+    ctx->states[state_id] = state;
+    ctx->n_states++;
 
-    return state;
+    return state_id;
 }
 
-re_ctx_t *re_dummy_ctx(re_ctx_t *real_ctx) {
+void re_lazy_init_transition(re_state_t *from_state, int chr) {
+    if (from_state->n_edges[chr] == 0) {
+        from_state->edges[chr] = alloc_array(int, 5);
+    }
+}
+
+/* re_ctx_t *re_dummy_ctx(re_ctx_t *real_ctx) {
     re_ctx_t *dummy = alloc(re_ctx_t);
     dummy->n_states = 0;
     dummy->regex = real_ctx->regex;
     dummy->pc = real_ctx->pc;
     dummy->is_dummy = true;
     return dummy;
-}
+}*/
 
 bool re_eof_ctx(re_ctx_t *ctx)
 //@requires ctx->pc <= string_length(ctx->regex);
@@ -143,10 +150,13 @@ bool re_consume(char expect, re_ctx_t *ctx)
     return match;
 }
 
-void re_add_epsilon(re_node_t *s, re_node_t *e) {
-    s->edges[s->n_edges].is_epsilon = true;
-    s->edges[s->n_edges].target = e;
-    s->n_edges++;
+void re_add_epsilon(re_ctx_t *ctx, int from, int to) {
+    if (ctx->is_test) return;
+
+    re_state_t *from_state = ctx->states[from];
+    re_lazy_init_transition(from_state, 128);
+    from_state->edges[128][from_state->n_edges[128]] = to;
+    from_state->n_edges[128]++;
 }
 
 bool re_consume_class_char(re_ctx_t *ctx, char *out) {
@@ -202,7 +212,7 @@ void re_char_bucket_whitespace(bool[] bucket)
     bucket[char_ord('\v')] = true;
 }
 
-bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e) {
+bool re_parse_class(re_ctx_t *ctx, int from, int to) {
     re_consume('[', ctx);
 
     if (re_eof_ctx(ctx)) {
@@ -231,9 +241,9 @@ bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e) {
             char *to_ptr = alloc(char);
             if (!re_consume_class_char(ctx, to_ptr)) return false;
             
-            int from = char_ord(*peek_ptr);
-            int to = char_ord(*to_ptr);
-            if (to < from) {
+            int from_char = char_ord(*peek_ptr);
+            int to_char = char_ord(*to_ptr);
+            if (to_char < from_char) {
                 print("Regex Syntax Error: bad character range [");
                 printchar(*peek_ptr);
                 printchar('-');
@@ -241,7 +251,7 @@ bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e) {
                 println("]");
             }
 
-            for (int i = from; i <= to; i++) {
+            for (int i = from_char; i <= to_char; i++) {
                 char_bucket[i] = true;
             }
         } else {
@@ -250,24 +260,31 @@ bool re_parse_class(re_ctx_t *ctx, re_node_t *s, re_node_t *e) {
     }
 
     if (inverted) re_char_bucket_invert(char_bucket);
-    s->edges[s->n_edges].bucket_set = char_bucket;
-    s->edges[s->n_edges].target = e;
-    s->n_edges++;
+
+    if (!ctx->is_test) {
+        re_state_t *from_state = ctx->states[from];
+        for (int chr = 0; chr < 128; chr++) {
+            if (char_bucket[chr]) {
+                from_state->edges[chr][from_state->n_edges[chr]] = to;
+                from_state->n_edges[chr]++;
+            }
+        }
+    }
 
     re_consume(']', ctx);
     return true;
 }
 
-bool re_parse_atom(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
+bool re_parse_atom(re_ctx_t *ctx, int from, int to)
 //@requires !re_eof_ctx(ctx);
 {
     char peek = re_peek_ctx(ctx);
     if (peek == '(') {
         ctx->pc++;
-        if (!re_parse_or(ctx, s, e)) return false;
+        if (!re_parse_or(ctx, from, to)) return false;
         if (!re_consume(')', ctx)) return false;
     } else if (peek == '[') {
-        if (!re_parse_class(ctx, s, e)) return false;
+        if (!re_parse_class(ctx, from, to)) return false;
     } else if (peek == '?' || peek == '+' || peek == '*') {
         println("Regex Syntax Error: misplaced '?', '*' or '+'");
         return false;
@@ -277,7 +294,6 @@ bool re_parse_atom(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
         bool[] bucket = alloc_array(bool, 128);
         if (peek == '\\') {
             peek = re_peek_ctx(ctx);
-            // TODO: add special characters such as '\d', ''
             if (
                 peek != '+' && peek != '.' && peek != '*' &&
                 peek != '?' && peek != '|' && peek != '\\' &&
@@ -320,88 +336,104 @@ bool re_parse_atom(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
             bucket[char_ord(peek)] = true;
         }
 
-        s->edges[s->n_edges].bucket_set = bucket;
-        s->edges[s->n_edges].target = e;
-        s->n_edges++;
+        if (!ctx->is_test) {
+            re_state_t *from_state = ctx->states[from];
+            for (int chr = 0; chr < 128; chr++) {
+                if (bucket[chr]) {
+                    re_lazy_init_transition(from_state, chr);
+                    from_state->edges[chr][from_state->n_edges[chr]] = to;
+                    from_state->n_edges[chr]++;
+                }
+            }
+        }
     }
 
     return true;
 }
 
 // term := group | group postfix
-bool re_parse_term(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
+bool re_parse_term(re_ctx_t *ctx, int from, int to)
 //@requires !re_eof_ctx(ctx);
 {
     // in case of '+', the same edge needs to be generated twice
-    re_ctx_t *dummy_ctx = re_dummy_ctx(ctx);
-    re_node_t *dummy_s = re_new_state(dummy_ctx, false);
-    re_node_t *dummy_e = re_new_state(dummy_ctx, false);
-    if (!re_parse_atom(dummy_ctx, dummy_s, dummy_e)) return false;
+    int pc_store = ctx->pc;
+    bool test_store = ctx->is_test;
+    ctx->is_test = true;
+    int dummy_from = re_new_state(ctx, false);
+    int dummy_to = re_new_state(ctx, false);
+    if (!re_parse_atom(ctx, dummy_from, dummy_to)) return false;
+    ctx->is_test = test_store;
 
-    if (re_eof_ctx(dummy_ctx)) {
-        return re_parse_atom(ctx, s, e);
+    if (re_eof_ctx(ctx)) {
+        ctx->pc = pc_store;
+        return re_parse_atom(ctx, from, to);
     }
 
-    char peek = re_peek_ctx(dummy_ctx);
+    char peek = re_peek_ctx(ctx);
+    ctx->pc = pc_store;
     if (peek == '?') {
-        re_add_epsilon(s, e);
-        re_assert(re_parse_atom(ctx, s, e));
+        re_add_epsilon(ctx, from, to);
+        re_assert(re_parse_atom(ctx, from, to));
         ctx->pc++;
     } else if (peek == '+') {
-        re_node_t *interm = re_new_state(ctx, false);
+        int interm = re_new_state(ctx, false);
 
-        int pc_store = ctx->pc;
-        re_assert(re_parse_atom(ctx, s, interm));
+        re_assert(re_parse_atom(ctx, from, interm));
         ctx->pc = pc_store;
         re_assert(re_parse_atom(ctx, interm, interm));
 
-        re_add_epsilon(interm, e);
+        re_add_epsilon(ctx, interm, to);
         ctx->pc++;
     } else if (peek == '*') {
-        re_node_t *interm = re_new_state(ctx, false);
+        int interm = re_new_state(ctx, false);
         re_assert(re_parse_atom(ctx, interm, interm));
         
-        re_add_epsilon(s, interm);
-        re_add_epsilon(interm, e);
+        re_add_epsilon(ctx, from, interm);
+        re_add_epsilon(ctx, interm, to);
         ctx->pc++;
     } else {
-        re_assert(re_parse_atom(ctx, s, e));
+        re_assert(re_parse_atom(ctx, from, to));
     }
 
     return true;
 }
 
 // seq := term | term seq | ''
-bool re_parse_seq(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
+bool re_parse_seq(re_ctx_t *ctx, int from, int to)
 //@requires ctx->pc <= string_length(ctx->regex);
 {
     if (re_is_sep_char(ctx)) {
-        re_add_epsilon(s, e);
+        re_add_epsilon(ctx, from, to);
         return true;
     }
     
     // ugly backtracking to eliminate one unnecessary epsilon transition
-    re_ctx_t *dummy_ctx = re_dummy_ctx(ctx);
-    re_node_t *dummy_s = re_new_state(dummy_ctx, false);
-    re_node_t *dummy_e = re_new_state(dummy_ctx, false);
-    if (!re_parse_term(dummy_ctx, dummy_s, dummy_e)) return false;
+    int pc_store = ctx->pc;
+    bool test_store = ctx->is_test;
+    ctx->is_test = true;
+    int dummy_from = re_new_state(ctx, false);
+    int dummy_to = re_new_state(ctx, false);
+    if (!re_parse_term(ctx, dummy_from, dummy_to)) return false;
+    ctx->is_test = test_store;
 
-    if (re_is_sep_char(dummy_ctx)) {
-        return re_parse_term(ctx, s, e);
+    if (re_is_sep_char(ctx)) {
+        ctx->pc = pc_store;
+        return re_parse_term(ctx, from, to);
     } else {
-        re_node_t *next = re_new_state(ctx, false);
-        return re_parse_term(ctx, s, next) && re_parse_seq(ctx, next, e);
+        ctx->pc = pc_store;
+        int next = re_new_state(ctx, false);
+        return re_parse_term(ctx, from, next) && re_parse_seq(ctx, next, to);
     }
 }
 
 // or := seq | seq '|' or
-bool re_parse_or(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
+bool re_parse_or(re_ctx_t *ctx, int from, int to)
 //@requires ctx->pc <= string_length(ctx->regex);
 {
-    if (!re_parse_seq(ctx, s, e)) return false;
+    if (!re_parse_seq(ctx, from, to)) return false;
     while (!re_eof_ctx(ctx) && re_peek_ctx(ctx) == '|') {
         ctx->pc++;
-        if (!re_parse_seq(ctx, s, e)) return false;
+        if (!re_parse_seq(ctx, from, to)) return false;
     }
 
     return true;
@@ -410,11 +442,11 @@ bool re_parse_or(re_ctx_t *ctx, re_node_t *s, re_node_t *e)
 re_dfa_t *re_parse_regex(string regex) {
     re_ctx_t *ctx = alloc(re_ctx_t);
     ctx->n_states = 0;
-    ctx->states = alloc_array(re_node_t *, 6969);
+    ctx->states = alloc_array(re_state_t *, 6969);
     ctx->pc = 0;
     ctx->regex = regex;
-    re_node_t *start = re_new_state(ctx, false);
-    re_node_t *end = re_new_state(ctx, true);
+    int start = re_new_state(ctx, false);
+    int end = re_new_state(ctx, true);
 
     if (!re_parse_or(ctx, start, end)) {
         return NULL;
@@ -430,7 +462,6 @@ re_dfa_t *re_parse_regex(string regex) {
     re_dfa_t *dfa = alloc(re_dfa_t);
     dfa->n_states = ctx->n_states;
     dfa->states = ctx->states;
-    dfa->head = start;
 
     return dfa;
 }
@@ -447,7 +478,7 @@ void re_print_char(int ord) {
         else printchar(chr);
     }
 }
-
+/*
 void re_print_state(re_node_t *state, bool[] visited, int n_states) {
     if (visited[state->state_id]) return;
     visited[state->state_id] = true;
@@ -514,7 +545,7 @@ void re_print_dfa(re_dfa_t *re) {
     re_print_state(re->head, visited, re->n_states);
 
     println("END OF DFA");
-}
+}*/
 
 /*
     Matches the given regular expression object on the start of the given input.
@@ -534,11 +565,13 @@ int re_regex_match(re_dfa_t *re, string input) {
 }
 
 int main() {
-    re_dfa_t *re = re_parse_regex("a[a-s]");
+    re_dfa_t *re = re_parse_regex("abc*|def+");
     print("Parse successful: ");
     printbool(re != NULL);
     printchar('\n');
-    re_print_dfa(re);
+    printint(re->n_states);
+    println("");
+    // re_print_dfa(re);
 
     return 0;
 }
