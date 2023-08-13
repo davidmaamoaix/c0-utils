@@ -12,6 +12,12 @@
         - shorthands: '\d', '\D', '\w', '\W', '\s', '\S'
     (TODO: do the "match m-n occurences" thing)
 
+    After including this file, the following functions can be used:
+        - `re_match_string`: determines whether a given regex matches a given
+        input completely (i.e. no trailing input after DFA finishes)
+        - `re_match_length`: returns the length of the substring (starting from
+        the given `begin_index`) in the input that matches the given regex
+
     Some notes:
         - shorthands and escaped characters should be typed with two backslashes
         like: '\\d', '\\?' (one backslash isn't valid C0 syntax for character
@@ -63,6 +69,15 @@ struct re_dfa_t {
     re_state_t *[] states;
 };
 typedef struct re_dfa_t re_dfa_t;
+
+struct re_match_ctx_t {
+    int pc;
+    string input;
+    int n_active;
+    bool[] active;
+    int last_term; // last index that reaches the terminal state of the DFA
+};
+typedef struct re_match_ctx_t re_match_ctx_t;
 
 bool re_parse_or(re_ctx_t *ctx, int from, int to);
 bool re_parse_seq(re_ctx_t *ctx, int from, int to);
@@ -450,6 +465,7 @@ re_dfa_t *re_parse_regex(string regex) {
     int end = re_new_state(ctx, true);
 
     if (!re_parse_or(ctx, start, end)) {
+        println("REGEX PARSE FAILED");
         return NULL;
     }
 
@@ -457,6 +473,7 @@ re_dfa_t *re_parse_regex(string regex) {
         print("Regex Syntax Error: parse ended at char ");
         printint(ctx->pc);
         printchar('\n');
+        println("REGEX PARSE FAILED");
         return NULL;
     }
 
@@ -479,42 +496,35 @@ void re_print_char(int ord) {
         else printchar(chr);
     }
 }
-/*
-void re_print_state(re_node_t *state, bool[] visited, int n_states) {
-    if (visited[state->state_id]) return;
-    visited[state->state_id] = true;
 
+void re_print_state(int id, re_dfa_t *dfa) {
+    re_state_t *state = dfa->states[id];
     print("State ");
-    printint(state->state_id);
+    printint(id);
     if (state->is_term_state) print(" (FINISH)");
     println(":");
 
-    if (state->n_edges == 0) {
+    int total_edges = 0;
+    for (int i = 0; i < 129; i++) total_edges += state->n_edges[i];
+    if (total_edges == 0) {
         println("\t(No out-going transitions)");
     } else {
-        bool[] state_bucket = alloc_array(bool, n_states);
-        bool[][] trans_bucket = alloc_array(bool[], n_states);
+        bool[] state_bucket = alloc_array(bool, dfa->n_states);
+        bool[][] trans_bucket = alloc_array(bool[], dfa->n_states);
 
-        for (int i = 0; i < state->n_edges; i++) {
-            int to = state->edges[i].target->state_id;
-            if (!state_bucket[to]) {
-                state_bucket[to] = true;
-                // 128 ASCII + 1 reserved for epsilon
-                trans_bucket[to] = alloc_array(bool, 129);
-            }
-
-            if (state->edges[i].is_epsilon) {
-                trans_bucket[to][128] = true;
-            } else {
-                for (int chr = 0; chr < 128; chr++) {
-                    if (state->edges[i].bucket_set[chr]) {
-                        trans_bucket[to][chr] = true;
-                    }
+        for (int chr = 0; chr < 129; chr++) {
+            for (int e = 0; e < state->n_edges[chr]; e++) {
+                int to_state = state->edges[chr][e];
+                if (!state_bucket[to_state]) {
+                    trans_bucket[to_state] = alloc_array(bool, 129);
                 }
+
+                state_bucket[to_state] = true;
+                trans_bucket[to_state][chr] = true;
             }
         }
 
-        for (int i = 0; i < n_states; i++) {
+        for (int i = 0; i < dfa->n_states; i++) {
             if (state_bucket[i]) {
                 print("\tState ");
                 printint(i);
@@ -532,47 +542,141 @@ void re_print_state(re_node_t *state, bool[] visited, int n_states) {
     }
 
     println("");
-    for (int i = 0; i < state->n_edges; i++) {
-        re_print_state(state->edges[i].target, visited, n_states);
-    }
 }
 
 void re_print_dfa(re_dfa_t *re) {
     print("Printing DFA with ");
     printint(re->n_states);
     println(" States");
+    println("");
 
-    bool[] visited = alloc_array(bool, re->n_states);
-    re_print_state(re->head, visited, re->n_states);
+    for (int i = 0; i < re->n_states; i++) re_print_state(i, re);
 
     println("END OF DFA");
-}*/
+}
 
 /*
-    Matches the given regular expression object on the start of the given input.
-    Returns the location in the string at which the regular expression matching
-    ends.
+    Performs all epsilon transitions from state `id`. Returns the amount of
+    added active states as a result of this action.
+*/
+int re_prop_epsilon(int id, re_dfa_t *re, bool[] active, re_match_ctx_t *ctx) {
+    re_state_t *state = re->states[id];
+    int n_new_states = 0;
+
+    for (int i = 0; i < state->n_edges[128]; i++) {
+        int to = state->edges[128][i];
+        if (!active[to]) {
+            active[to] = true;
+            n_new_states++;
+            n_new_states += re_prop_epsilon(to, re, active, ctx);
+
+            if (re->states[to]->is_term_state) {
+                ctx->last_term = ctx->pc + 1;
+            }
+        }
+    }
+
+    return n_new_states;
+}
+
+/*
+    Matches the given regular expression object on the given input, starting at
+    index `begin_index`. Returns the length of the matched sequence starting
+    from the given position.
 
     Example:
         re = "a(b|c)d"
         input = "acdef"
-        This returns 3 as the DFA ends on character 'e' in the input.
+        begin_index = 0
+        This returns 3 as the DFA only matches the prefix "acd".
 */
-int re_regex_match(re_dfa_t *re, string input) {
-    int n_active = 1;
-    bool[] active = alloc_array(bool, re->n_states);
+int re_run_dfa(re_dfa_t *re, string input, int begin_index) {
+    re_match_ctx_t *ctx = alloc(re_match_ctx_t);
 
-    return 0;
+    ctx->active = alloc_array(bool, re->n_states);
+    ctx->active[0] = true;
+    ctx->n_active = 1;
+
+    ctx->input = input;
+
+    // `re_prop_epsilon` records a terminal state as `ctx->pc + 1`, so setting
+    // `ctx->pc` to -1 is a quick hack to prevent `re_prop_epsilon` from
+    // recording 0 + 1 = 1 during the epsilon propagation of initial states
+    ctx->pc = -1;
+    ctx->last_term = 0;
+    ctx->n_active += re_prop_epsilon(0, re, ctx->active, ctx);
+
+    for (
+        ctx->pc = 0;
+        ctx->pc + begin_index < string_length(ctx->input) && ctx->n_active != 0;
+        ctx->pc++
+    ) {
+        int n_new_states = 0;
+        bool[] new_states = alloc_array(bool, re->n_states);
+
+        int curr = char_ord(string_charat(input, ctx->pc + begin_index));
+
+        // for all currently active states, perform its transformation
+        for (int i = 0; i < re->n_states; i++) {
+            if (ctx->active[i]) {
+                for (int e = 0; e < re->states[i]->n_edges[curr]; e++) {
+                    int to_state = re->states[i]->edges[curr][e];
+                    if (!new_states[to_state]) {
+                        new_states[to_state] = true;
+                        n_new_states++;
+                        n_new_states += re_prop_epsilon(
+                            to_state, re, new_states, ctx
+                        );
+
+                        if (re->states[to_state]->is_term_state) {
+                            ctx->last_term = ctx->pc + 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        ctx->n_active = n_new_states;
+        ctx->active = new_states;
+    }
+
+    return ctx->last_term;
+}
+
+/*
+    Determines whether the given input `input` matches the regular expression
+    `regex`.
+*/
+bool re_match_string(string regex, string input) {
+    re_dfa_t *re = re_parse_regex(regex);
+    if (re == NULL) return false; // regex error; see stdout for error message
+    return re_run_dfa(re, input, 0) == string_length(input);
+}
+
+/*
+    Returns the length of the substring (starting from the given `begin_index`)
+    in the given input that matches the given regex.
+*/
+int re_match_length(string regex, string input, int begin_index) {
+    re_dfa_t *re = re_parse_regex(regex);
+    if (re == NULL) return -1; // regex error; see stdout for error message
+    return re_run_dfa(re, input, begin_index);
 }
 
 int main() {
-    re_dfa_t *re = re_parse_regex("a[a-zA-Z]f");
-    print("Parse successful: ");
-    printbool(re != NULL);
-    printchar('\n');
-    printint(re->n_states);
-    println("");
-    // re_print_dfa(re);
+    //@assert re_match_string("a|ac|dc", "a");
+    //@assert !re_match_string("a|ac|dc", "d");
+
+    //@assert re_match_string("[a-zA-Z_][a-zA-Z0-9_]*", "sCoTtY_dOg");
+    //@assert re_match_string("\\s*[a-zA-Z_][a-zA-Z0-9_]*", "   \tsCoTtY_dOg");
+    //@assert !re_match_string("[a-zA-Z_][a-zA-Z0-9_]*", "1SCOTTY");
+
+    //@assert re_match_string("abcdef|(gh)+ijkl", "abcdef");
+    //@assert re_match_string("abcdef|(gh)+ijkl", "ghghghghghijkl");
+    //@assert re_match_string("(a1(cd|ef|gh))", "a1cd");
+    //@assert !re_match_string("abcdef|ghijkl", "abdef");
+
+    //@assert re_match_length("[a-z]+", "%&*carnegie72", 3) == 8;
 
     return 0;
 }
