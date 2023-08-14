@@ -1,0 +1,42 @@
+#use <conio>
+#use <string>
+#use <util>
+
+/*
+    This file contains a map implemented with red-black tree.
+*/
+
+/*
+    Introducing the worst implementation of polymorphism in the history of
+    computer science create by me at 3 a.m. after a week of sleep deprivation.
+
+    So basically just create a injective function from any type to `pq_key_t`
+    and use the functions in this file to make a map with your type as keys. The
+    output type is always an integer though, as it is easy to create a mapping
+    to your own type at a covariant position, but not at a contravariant
+    position.
+*/
+struct pq_key_t {
+    int key_size;
+    int[] key;
+};
+typedef struct pq_key_t pq_key_t;
+
+struct pq_queue_t {
+    bool allow_repeat;
+    bool ascending;
+};
+typedef struct pq_queue_t pq_queue_t;
+
+int pq_compare_key(pq_key_t *a, pq_key_t *b)
+//@ensures -1 <= \result && \result <= 1;
+{
+    for (int i = 0; i < min(a->key_size, b->key_size); i++) {
+        if (a->key[i] < b->key[i]) return -1;
+        else if (a->key[i] > b->key[i]) return 1;
+    }
+
+    if (a->key_size == b->key_size) return 0;
+    else if (a->key_size < b->key_size) return -1;
+    else return 1;
+}
