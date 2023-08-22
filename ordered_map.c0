@@ -267,6 +267,27 @@ int om_get_i(om_map_t *map, int key) {
     return om_find_node(map->root, om_serialize_int(key))->value;
 }
 
+/*
+    Removes a key from the map and return true if the key exists and is deleted,
+    false otherwise.
+*/
+/*bool om_delete_key(om_map_t *map, om_key_t *key) {
+    om_node_t *node = om_find_node(map->root, key);
+    if (node == NULL) return false;
+
+    // https://www.geeksforgeeks.org/deletion-in-red-black-tree/
+    om_node_t *u;
+    if (node->left == NULL && node->right == NULL) {
+        u = NULL;
+    } else if (node->left == NULL || node->right == NULL) {
+        u = node->left != NULL ? node->left : node->right;
+    } else {
+
+    }
+
+    return true;
+}*/
+
 void om_print_kv_pair(om_node_t *kv) {
     print("(");
     printchar(kv->is_red ? 'r' : 'b');
