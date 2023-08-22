@@ -10,14 +10,14 @@
     Introducing the worst implementation of polymorphism in the history of
     computer science create by me at 3 a.m. after a week of sleep deprivation.
 
-    So basically just create a injective function from any type to `pq_key_t`
+    So basically just create a injective function from any type to `om_key_t`
     and use the functions in this file to make a map with your type as keys. The
     output type is always an integer though, as it is easy to create a mapping
     to your own type at a covariant position, but not at a contravariant
     position.
 
     Note: an `om_key_t *` passed into `om_insert_kv_pair` is not copied.
-    Therefore an `om_key_t` should never be altered after its creation.
+    Therefore an `om_key_t` should never be mutated after its creation.
 */
 struct om_key_t {
     int key_size;
@@ -191,7 +191,6 @@ void om_recolor_or_rotate(om_map_t *map, om_node_t *node) {
 
             } else if (node == parent->right && parent == grand->right) {
                 // RR case
-
                 left_rotate(grand, map);
                 bool grand_red = grand->is_red;
                 grand->is_red = parent->is_red;
@@ -210,6 +209,8 @@ void om_recolor_or_rotate(om_map_t *map, om_node_t *node) {
             }
         }
     }
+
+    map->root->is_red = false;
 }
 
 void om_insert_kv_pair(om_map_t *tree, om_key_t *key, int value) {
@@ -250,8 +251,20 @@ void om_insert_kv_pair(om_map_t *tree, om_key_t *key, int value) {
     }
 }
 
-void om_insert_string(om_map_t *map, string str, int value) {
-    om_insert_kv_pair(map, om_serialize_string(str), value);
+void om_insert_s(om_map_t *map, string key, int value) {
+    om_insert_kv_pair(map, om_serialize_string(key), value);
+}
+
+void om_insert_i(om_map_t *map, int key, int value) {
+    om_insert_kv_pair(map, om_serialize_int(key), value);
+}
+
+int om_get_s(om_map_t *map, string key) {
+    return om_find_node(map->root, om_serialize_string(key))->value;
+}
+
+int om_get_i(om_map_t *map, int key) {
+    return om_find_node(map->root, om_serialize_int(key))->value;
 }
 
 void om_print_kv_pair(om_node_t *kv) {
@@ -309,11 +322,13 @@ void om_print_map(om_map_t *map) {
 int main() {
     om_map_t *map = om_create_map();
 
-    om_insert_string(map, "1", 0);
-    om_insert_string(map, "22", 1);
-    om_insert_string(map, "333", 2);
-    om_print_map(map);
-    //om_insert_string(map, "4444", 3);
+    om_insert_s(map, "main", 4);
+    om_insert_s(map, "hello", 5);
+    om_insert_s(map, "cmu", 3);
+    om_insert_s(map, "hello", 60);
+
+    printint(om_get_s(map, "hello"));
+    println("");
 
     return 0;
 }
