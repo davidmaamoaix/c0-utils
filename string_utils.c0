@@ -1,0 +1,46 @@
+#use <conio>
+#use <string>
+
+string s_join(int n_strs, string[] strs, string sep) {
+    if (n_strs == 0) return "";
+    string result = strs[0];
+
+    for (int i = 1; i < n_strs; i++) {
+        result = format("%s%s%s", result, sep, strs[i]);
+    }
+
+    return result;
+}
+
+int s_count_indices(string base, string sub, int[] indices) {
+    if (string_length(sub) == 0) return string_length(base) + 1;
+
+    int count = 0;
+    for (int i = 0; i <= string_length(base) - string_length(sub); i++) {
+        bool match = true;
+        for (int j = 0; match && j < string_length(sub); j++) {
+            if (string_charat(base, i + j) != string_charat(sub, j)) {
+                match = false;
+            }
+        }
+
+        if (match) {
+            indices[count] = i;
+            count++;
+        }
+    }
+
+    return count;
+}
+
+int main() {
+    string abc = "sssabcjassassssssssanb%^";
+    int[] arr = alloc_array(int, 69);
+    int count = s_count_indices(abc, "ssa", arr);
+    printint(count);
+    println("");
+
+    for (int i = 0; i < count; i++) print(format("%d ", arr[i]));
+
+    return 0;
+}
