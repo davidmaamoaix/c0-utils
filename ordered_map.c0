@@ -57,7 +57,7 @@ typedef struct om_map_t om_map_t;
  */
 bool __om_fully_connected(om_node_t *node, om_node_t *parent) {
     if (node == NULL) return true;
-    if (parent != NULL && node->parent != parent) return false;
+    if (node->parent != parent) return false;
     return __om_fully_connected(node->left, node)
         || __om_fully_connected(node->right, node);
 }
@@ -419,16 +419,66 @@ void om_delete_node(om_map_t *tree, om_node_t *v)
 //@ensures __om_is_valid_tree(tree);
 {
     om_node_t *u = om_del_find_replace(v);
+    bool both_black = (u == NULL || !u->is_red) && !v->is_red;
 
     // deleting a leaf node
-    if (u == NULL) {
-        //@assert v->left == NULL && v->right == NULL;
+    if (v->left == NULL && v->right == NULL) {
+        //@assert u == NULL;
         if (v == tree->root) {
+            //@assert tree->size == 1;
+
             tree->root = NULL;
             tree->size--;
         } else {
-            
+            if (both_black) {
+                // TODO: fix double black
+            } else {
+                // make sibling red
+                om_node_t *sibling = __om_get_sibling(v);
+                if (sibling != NULL) sibling->is_red = true;
+            }
+
+            // delete `v`
+            //@assert v->parent != NULL;
+            if (v->parent->left == v) v->parent->left = NULL;
+            else v ->parent->right = NULL;
+            tree->size--;
         }
+
+    // deleting a node with one children
+    } else if (v->left == NULL || v->right == NULL) {
+        if (v == tree->root) {
+            //@assert tree->size == 2;
+
+            v->key = u->key;
+            v->value = u->value;
+            v->left = NULL;
+            v->right = NULL;
+            tree->size--;
+        } else {
+            // remove `v` and replace it with `u`
+            u->parent = v->parent;
+            if (v->parent->left == v) v->parent->left = u;
+            else v->parent->right = u;
+
+            if (both_black) {
+                // TODO: fix double black
+            } else {
+                //@assert u->is_red || v->is_red;
+                u->is_red = false;
+            }
+        }
+
+    // internal node
+    } else {
+        //@assert v->left != NULL && v->right != NULL;
+        om_key_t *temp_key = v->key;
+        int temp_value = v->value;
+        v->key = u->key;
+        v->value = u->value;
+        u->key = temp_key;
+        u->value = temp_value;
+        om_delete_node(tree, u);
     }
 }
 
