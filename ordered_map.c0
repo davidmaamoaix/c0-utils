@@ -51,26 +51,26 @@ typedef struct om_map_t om_map_t;
 
 // BEGIN contract functions
 
-bool __om_valid_node_height(om_node_t *node, int *height_ptr) {
+/*
+    In order to bypass pureness restriction of contract functions:
+    - returns -1 if there exists non-matching height in descendents
+    - returns black height (n >= 0) if subtrees are valid
+ */
+int __om_valid_node_height(om_node_t *node) {
     if (node == NULL) {
-        *height_ptr = 1;
-        return true;
+        return 1;
     }
 
-    int *l_height = alloc(int);
-    int *r_height = alloc(int);
+    int l_height = __om_valid_node_height(node->left);
+    int r_height = __om_valid_node_height(node->right);
 
-    if (
-        !__om_valid_node_height(node->left, l_height) ||
-        !__om_valid_node_height(node->right, r_height)
-    ) {
-        return false;
+    if (l_height == -1 || r_height == -1) {
+        return -1;
     }
 
-    if (*l_height != *r_height) return false;
+    if (l_height != r_height) return -1;
 
-    *height_ptr = node->is_red ? *l_height : *l_height + 1;
-    return true;
+    return node->is_red ? l_height : l_height + 1;
 }
 
 bool __om_no_consecutive_red(om_node_t *node, bool is_parent_red) {
@@ -90,9 +90,8 @@ bool __om_is_valid_tree(om_map_t *map)
     if (map->root->is_red) return false;
 
     // nno consecutive red nodes && equal-size black path
-    int *height_ptr = alloc(int);
     return __om_no_consecutive_red(map->root, false)
-        || __om_valid_node_height(map->root, height_ptr);
+        || __om_valid_node_height(map->root) != -1;
 }
 
 // END contract functions
@@ -499,6 +498,7 @@ int main() {
     om_insert_s(map, "hello", 5);
     om_insert_s(map, "cmu", 3);
     om_insert_s(map, "hello", 60);
+    om_insert_s(map, "hello", 69);
 
     printint(om_get_s(map, "hello"));
     println("");
