@@ -52,6 +52,17 @@ typedef struct om_map_t om_map_t;
 // BEGIN contract functions
 
 /*
+    Sanity check for checking that the children of a node has parent pointing
+    to the node.
+ */
+bool __om_fully_connected(om_node_t *node, om_node_t *parent) {
+    if (node == NULL) return true;
+    if (parent != NULL && node->parent != parent) return false;
+    return __om_fully_connected(node->left, node)
+        || __om_fully_connected(node->right, node);
+}
+
+/*
     In order to bypass pureness restriction of contract functions:
     - returns -1 if there exists non-matching height in descendents
     - returns black height (n >= 0) if subtrees are valid
@@ -77,21 +88,22 @@ bool __om_no_consecutive_red(om_node_t *node, bool is_parent_red) {
     if (node == NULL) return true;
     if (node->is_red && is_parent_red) return false;
     return __om_no_consecutive_red(node->left, node->is_red)
-        || __om_no_consecutive_red(node->right, node->is_red);
+        && __om_no_consecutive_red(node->right, node->is_red);
 }
 
-bool __om_is_valid_tree(om_map_t *map)
-//@requires map != NULL;
+bool __om_is_valid_tree(om_map_t *tree)
+//@requires tree != NULL;
 {
     // empty tree is fine
-    if (map->root == NULL) return true;
-
+    if (tree->root == NULL) return true;
+    
     // root is black
-    if (map->root->is_red) return false;
-
+    if (tree->root->is_red) return false;
+    
     // nno consecutive red nodes && equal-size black path
-    return __om_no_consecutive_red(map->root, false)
-        || __om_valid_node_height(map->root) != -1;
+    return __om_fully_connected(tree->root, NULL)
+        && __om_no_consecutive_red(tree->root, false)
+        && __om_valid_node_height(tree->root) != -1;
 }
 
 // END contract functions
@@ -101,6 +113,28 @@ bool __om_is_valid_tree(om_map_t *map)
 void om_print_kv_pair(om_node_t *kv);
 
 // END forward declarations
+
+// BEGIN utilities functions
+
+om_node_t *__om_get_uncle(om_node_t *node)
+//@requires node != NULL;
+//@requires node->parent != NULL;
+//@requires node->parent->parent != NULL;
+{
+    om_node_t *parent = node->parent;
+    om_node_t *grand = parent->parent;
+    return grand->left == parent ? grand->right : grand->left;
+}
+
+om_node_t *__om_get_sibling(om_node_t *node)
+//@requires node != NULL;
+//@requires node->parent != NULL;
+{
+    om_node_t *parent = node->parent;
+    return parent->left == node ? parent->right : parent->left;
+}
+
+// END utilities functions
 
 // BEGIN constructor
 
@@ -229,10 +263,7 @@ void om_recolor_or_rotate(om_map_t *tree, om_node_t *node) {
         //@assert grand != NULL; // since a red node cannot be root node
         //@assert parent == grand->left || parent == grand->right;
 
-        om_node_t *uncle;
-        if (parent == grand->left) uncle = grand->right;
-        else uncle = grand->left;
-
+        om_node_t *uncle = __om_get_uncle(node);
         if (uncle != NULL && uncle->is_red) {
             /*
                 - change parent and uncle to black
@@ -290,7 +321,10 @@ void om_recolor_or_rotate(om_map_t *tree, om_node_t *node) {
     tree->root->is_red = false;
 }
 
-void om_insert_kv_pair(om_map_t *tree, om_key_t *key, int value) {
+void om_insert_kv_pair(om_map_t *tree, om_key_t *key, int value)
+//@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
+{
     om_node_t *new_node = alloc(om_node_t);
     new_node->is_red = true;
     new_node->key = key;
@@ -330,24 +364,28 @@ void om_insert_kv_pair(om_map_t *tree, om_key_t *key, int value) {
 
 void om_insert_s(om_map_t *tree, string key, int value)
 //@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
 {
     om_insert_kv_pair(tree, om_serialize_string(key), value);
 }
 
 void om_insert_i(om_map_t *tree, int key, int value)
 //@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
 {
     om_insert_kv_pair(tree, om_serialize_int(key), value);
 }
 
 int om_get_s(om_map_t *tree, string key)
 //@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
 {
     return om_find_node(tree->root, om_serialize_string(key))->value;
 }
 
 int om_get_i(om_map_t *tree, int key)
 //@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
 {
     return om_find_node(tree->root, om_serialize_int(key))->value;
 }
@@ -376,19 +414,20 @@ om_node_t *om_del_find_replace(om_node_t *node)
 }
 
 // https://www.geeksforgeeks.org/deletion-in-red-black-tree/
-void om_rec_delete_node(om_map_t *map, om_node_t *v)
+void om_delete_node(om_map_t *tree, om_node_t *v)
 //@requires v != NULL;
+//@ensures __om_is_valid_tree(tree);
 {
     om_node_t *u = om_del_find_replace(v);
 
     // deleting a leaf node
     if (u == NULL) {
         //@assert v->left == NULL && v->right == NULL;
-        if (v == map->root) {
-            map->root = NULL;
-            map->size--;
+        if (v == tree->root) {
+            tree->root = NULL;
+            tree->size--;
         } else {
-
+            
         }
     }
 }
@@ -494,14 +533,29 @@ void om_print_map(om_map_t *tree)
 int main() {
     om_map_t *map = om_create_map();
 
-    om_insert_s(map, "main", 4);
-    om_insert_s(map, "hello", 5);
-    om_insert_s(map, "cmu", 3);
-    om_insert_s(map, "hello", 60);
-    om_insert_s(map, "hello", 69);
+    om_insert_s(map, "algorithm", 1);
+    om_insert_s(map, "cmu", 2);
+    om_insert_s(map, "code", 3);
+    om_insert_s(map, "compute", 4);
+    om_insert_s(map, "data", 5);
+    om_insert_s(map, "database", 6);
+    om_insert_s(map, "graph", 7);
+    om_insert_s(map, "hello", 8);
+    om_insert_s(map, "internet", 9);
+    om_insert_s(map, "keyboard", 10);
+    om_insert_s(map, "language", 11);
+    om_insert_s(map, "laptop", 12);
+    om_insert_s(map, "main", 13);
+    om_insert_s(map, "monitor", 14);
+    om_insert_s(map, "mouse", 15);
+    om_insert_s(map, "network", 16);
+    om_insert_s(map, "security", 17);
+    om_insert_s(map, "tree", 18);
+    om_insert_s(map, "website", 19);
+    om_insert_s(map, "world", 20);
 
-    printint(om_get_s(map, "hello"));
-    println("");
+    om_print_map(map);
+    //printf("%s\n", );
 
     return 0;
 }
