@@ -341,7 +341,7 @@ void __om_recolor_or_rotate(om_map_t *tree, om_node_t *node) {
                 node->is_red = grand_red;
             } else {
                 // SHOULD BE UNREACHABLE.
-                //@assert 0 == 1;
+                error("oops");
             }
         }
     }
