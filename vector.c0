@@ -98,17 +98,17 @@ int v_remove(vec_t *vec)
 
 // END interface
 
-int main() {
-    vec_t *vec = v_create_vector();
+// int main() {
+//     vec_t *vec = v_create_vector();
 
-    for (int i = 0; i < 65512; i++) {
-        v_append(vec, i);
-    }
-    for (int i = 0; i < 65512; i++) {
-        assert(v_get(vec, i) == i);
-    }
+//     for (int i = 0; i < 65512; i++) {
+//         v_append(vec, i);
+//     }
+//     for (int i = 0; i < 65512; i++) {
+//         assert(v_get(vec, i) == i);
+//     }
 
-    printf("%d %d\n", vec->len, vec->limit);
+//     printf("%d %d\n", vec->len, vec->limit);
 
-    return 0;
-}
+//     return 0;
+// }
