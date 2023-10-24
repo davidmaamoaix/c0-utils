@@ -32,7 +32,7 @@
 
 struct re_state_t {
     bool is_term_state;
-    vec_t *[] edges; // edges[ord][C_OUTGOING_LENGTH]
+    vec_t *[] edges; // edges[ord]
 };
 typedef struct re_state_t re_state_t;
 
