@@ -723,14 +723,6 @@ int om_peek_max_i(om_map_t *tree)
     return * (int *) max->value;
 }
 
-bool om_contains_i(om_map_t *tree, int value)
-//@requires __om_is_valid_tree(tree);
-{
-    int *ptr = alloc(int);
-    *ptr = value;
-    return __om_find_node(tree, tree->root, (void *) ptr) != NULL;
-}
-
 // END queue shorthand
 
 // BEGIN map shorthand
@@ -746,6 +738,16 @@ void *om_get(om_map_t *tree, void *key)
 //@requires __om_is_valid_tree(tree);
 {
     return __om_find_node(tree, tree->root, key)->value;
+}
+
+void om_insert_i(om_map_t *tree, int key, void *value)
+//@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    int *k_ptr = alloc(int);
+    *k_ptr = key;
+
+    __om_insert_kv_pair(tree, (void *) k_ptr, value);
 }
 
 void om_insert_si(om_map_t *tree, string key, int value)

@@ -1,0 +1,59 @@
+#use <conio>
+
+struct graph_t {
+    bool directed;
+    om_map_t *adj_map; // int -> om_map_t *
+};
+typedef struct graph_t graph_t;
+
+bool g_is_graph(graph_t *graph) {
+    return graph != NULL && __om_is_valid_tree(graph->adj_map);
+}
+
+graph_t *g_create_graph(bool directed)
+//@ensures g_is_graph(\result);
+{
+    graph_t *graph = alloc(graph_t);
+    graph->directed = directed;
+    graph->adj_map = om_create_map(&int_ptr_compare);
+    return graph;
+}
+
+bool g_has_node(graph_t *graph, int node)
+//@requires g_is_graph(graph);
+{
+    return om_has_i(graph->adj_map, node);
+}
+
+void g_add_node(graph_t *graph, int node)
+//@requires g_is_graph(graph);
+//@requires !g_has_node(graph, node);
+{
+    int *key = alloc(int);
+    *key = node;
+    om_map_t *value = om_create_map(&int_ptr_compare);
+
+    __om_insert_kv_pair(graph->adj_map, (void *) key, (void *) value);
+}
+
+void g_add_edge(graph_t *graph, int a, int b)
+//@requires g_is_graph(graph);
+//@requires g_has_node(graph, a);
+//@requires g_has_node(graph, b);
+{
+    om_map_t *a_to_b = (om_map_t *) om_get_i(graph->adj_map, a);
+    om_push_i(a_to_b, b);
+
+    if (!graph->directed) {
+        om_map_t *b_to_a = (om_map_t *) om_get_i(graph->adj_map, b);
+        om_push_i(b_to_a, a);
+    }
+}
+
+int[] g_successors(graph_t *graph, int node)
+//@requires g_is_graph(graph);
+//@requires g_has_node(graph, node);
+{
+    om_map_t *edges = (om_map_t *) om_get_i(graph->adj_map, node);
+    return om_get_keys_int(edges);
+}
