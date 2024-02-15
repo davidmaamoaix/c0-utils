@@ -19,9 +19,9 @@
         the given `begin_index`) in the input that matches the given regex
 
     Some notes:
-        - shorthands and escaped characters should be typed with two backslashes
-        like: '\\d', '\\?' (one backslash isn't valid C0 syntax for character
-        literals)
+        - shorthands and escaped characters should be typed with two
+        backslashes like: '\\d', '\\?' (one backslash isn't valid C0 syntax for
+        character literals)
         - special characters such as '\t', '\n' and '\r' uses one backslash (as
         C0 supports them)
         - all quantifiers are greedy
@@ -117,7 +117,7 @@ bool __re_is_sep_char(re_ctx_t *ctx)
 void __re_consume(char expect, re_ctx_t *ctx)
 //@requires ctx->pc <= string_length(ctx->regex);
 {
-    // explicit check for more explicit error message (thus the loose @requires)
+    // explicit check for explicit error message (thus the loose @requires)
     if (__re_eof_ctx(ctx)) {
         error("Regex Syntax Error: unexpected end of input");
     }
@@ -547,16 +547,18 @@ int re_run_dfa(re_dfa_t *re, string input, int begin_index, bool match_least) {
 
     ctx->input = input;
 
-    // `__re_prop_epsilon` records a terminal state as `ctx->pc + 1`, so setting
-    // `ctx->pc` to -1 is a quick hack to prevent `__re_prop_epsilon` from
-    // recording 0 + 1 = 1 during the epsilon propagation of initial states
+    // `__re_prop_epsilon` records a terminal state as `ctx->pc + 1`, so
+    // setting `ctx->pc` to -1 is a quick hack to prevent `__re_prop_epsilon`
+    // from recording 0 + 1 = 1 during the epsilon propagation of initial
+    // states
     ctx->pc = -1;
     ctx->last_term = 0;
     ctx->n_active += __re_prop_epsilon(0, re, ctx->active, ctx);
 
     for (
         ctx->pc = 0;
-        ctx->pc + begin_index < string_length(ctx->input) && ctx->n_active != 0;
+        ctx->pc + begin_index < string_length(ctx->input) &&
+            ctx->n_active != 0;
         ctx->pc++
     ) {
 
@@ -577,7 +579,9 @@ int re_run_dfa(re_dfa_t *re, string input, int begin_index, bool match_least) {
         // for all currently active states, perform its transformation
         for (int i = 0; i < re->n_states; i++) {
             if (ctx->active[i]) {
-                for (int e = 0; e < v_length(re->states[i]->edges[curr]); e++) {
+                for (
+                    int e = 0; e < v_length(re->states[i]->edges[curr]); e++
+                ) {
                     int to_state = v_get_int(re->states[i]->edges[curr], e);
                     if (!new_states[to_state]) {
                         new_states[to_state] = true;

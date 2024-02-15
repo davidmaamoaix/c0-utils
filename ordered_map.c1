@@ -539,8 +539,8 @@ void __om_delete_node(om_map_t *tree, om_node_t *v)
 }
 
 /*
-    Removes a key from the map and return true if the key exists and is deleted,
-    false otherwise.
+    Removes a key from the map and return true if the key exists and is
+    deleted, false otherwise.
 */
 bool __om_delete_key(om_map_t *tree, void *key)
 //@requires __om_is_valid_tree(tree);
