@@ -922,68 +922,68 @@ om_map_t *om_union(om_map_t *a, om_map_t *b)
 
 // END set shorthand
 
-int main() {
-    om_map_t *tree = om_create_bst(&int_ptr_compare);
+// int main() {
+//     om_map_t *tree = om_create_bst(&int_ptr_compare);
 
-    om_push_i(tree, 15);
-    om_push_i(tree, 8);
-    om_push_i(tree, 20);
-    om_push_i(tree, 4);
-    om_push_i(tree, 12);
-    om_push_i(tree, 18);
-    om_push_i(tree, 25);
-    om_push_i(tree, 2);
-    om_push_i(tree, 6);
-    om_push_i(tree, 10);
-    om_push_i(tree, 14);
-    om_push_i(tree, 16);
-    om_push_i(tree, 22);
-    om_push_i(tree, 28);
-    om_push_i(tree, 1);
-    om_push_i(tree, 5);
-    om_push_i(tree, 9);
-    om_push_i(tree, 13);
-    om_push_i(tree, 19);
-    om_push_i(tree, 24);
+//     om_push_i(tree, 15);
+//     om_push_i(tree, 8);
+//     om_push_i(tree, 20);
+//     om_push_i(tree, 4);
+//     om_push_i(tree, 12);
+//     om_push_i(tree, 18);
+//     om_push_i(tree, 25);
+//     om_push_i(tree, 2);
+//     om_push_i(tree, 6);
+//     om_push_i(tree, 10);
+//     om_push_i(tree, 14);
+//     om_push_i(tree, 16);
+//     om_push_i(tree, 22);
+//     om_push_i(tree, 28);
+//     om_push_i(tree, 1);
+//     om_push_i(tree, 5);
+//     om_push_i(tree, 9);
+//     om_push_i(tree, 13);
+//     om_push_i(tree, 19);
+//     om_push_i(tree, 24);
 
-    om_map_t *copy = om_copy(tree, NULL, NULL);
+//     om_map_t *copy = om_copy(tree, NULL, NULL);
 
-    om_delete_i(copy, 15);
-    om_delete_i(copy, 8);
+//     om_delete_i(copy, 15);
+//     om_delete_i(copy, 8);
 
-    int[] keys;
+//     int[] keys;
     
-    print("A: ");
-    keys = om_get_keys_int(tree);
-    for (int i = 0; i < om_size(tree); i++) {
-        printf("%d ", keys[i]);
-    }
-    println("");
+//     print("A: ");
+//     keys = om_get_keys_int(tree);
+//     for (int i = 0; i < om_size(tree); i++) {
+//         printf("%d ", keys[i]);
+//     }
+//     println("");
 
-    print("B: ");
-    keys = om_get_keys_int(copy);
-    for (int i = 0; i < om_size(copy); i++) {
-        printf("%d ", keys[i]);
-    }
-    println("");
+//     print("B: ");
+//     keys = om_get_keys_int(copy);
+//     for (int i = 0; i < om_size(copy); i++) {
+//         printf("%d ", keys[i]);
+//     }
+//     println("");
 
-    // for (int i = 1000; i > -1; i--) {
-    //     om_push_i(tree, i);
-    //     if (i % 10000 == 0) printf("%d\n", i);
-    // }
+//     // for (int i = 1000; i > -1; i--) {
+//     //     om_push_i(tree, i);
+//     //     if (i % 10000 == 0) printf("%d\n", i);
+//     // }
 
-    // printf("Depth: %d\n", __om_max_depth(tree->root));
+//     // printf("Depth: %d\n", __om_max_depth(tree->root));
 
-    // om_print_map(map);
-    // printf("Side: %d\n", tree->size);
-    // while (!om_empty(tree)) {
-    //     printf("%d\n", om_pop_min_i(tree));
-    // }
-    // int[] keys = om_get_keys_int(tree);
-    // for (int i = 0; i < tree->size; i++) {
-    //     printf("%d ", keys[i]);
-    // }
-    // println("");
+//     // om_print_map(map);
+//     // printf("Side: %d\n", tree->size);
+//     // while (!om_empty(tree)) {
+//     //     printf("%d\n", om_pop_min_i(tree));
+//     // }
+//     // int[] keys = om_get_keys_int(tree);
+//     // for (int i = 0; i < tree->size; i++) {
+//     //     printf("%d ", keys[i]);
+//     // }
+//     // println("");
 
-    return 0;
-}
+//     return 0;
+// }
