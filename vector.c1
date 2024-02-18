@@ -102,6 +102,19 @@ void *v_remove_last(vec_t *vec)
 
 // BEGIN shorthands
 
+bool v_is_empty(vec_t *vec)
+//@requires v_is_vector(vec);
+{
+    return v_length(vec) == 0;
+}
+
+void *v_get_last(vec_t *vec)
+//@requires v_is_vector(vec);
+//@requires 0 < v_length(vec);
+{
+    return v_get(vec, vec->len - 1);
+}
+
 int v_get_int(vec_t *vec, int i)
 //@requires v_is_vector(vec);
 //@requires 0 <= i && i < vec->len;
