@@ -36,6 +36,8 @@ typedef struct om_map_t om_map_t;
 
 // END `om_node_t` definitions
 
+void om_print_int_tree(om_map_t *tree);
+
 // BEGIN contract functions
 
 /*
@@ -85,14 +87,16 @@ int __om_n_nodes(om_node_t *node) {
 
 bool __om_is_valid_tree(om_map_t *tree)
 {
+    // println("Begin tracking tree");
     if (tree == NULL) return false;
 
     // empty tree is fine
     if (tree->root == NULL) return true;
-    
+
     // root is black
     if (tree->root->is_red) return false;
-    
+    // printbool(__om_no_consecutive_red(tree->root, false));
+    // println("");
     // no consecutive red nodes && equal-size black path
     return __om_fully_connected(tree->root, NULL)
         && __om_no_consecutive_red(tree->root, false)
@@ -317,15 +321,26 @@ void __om_recolor_or_rotate(om_map_t *tree, om_node_t *node) {
 
             } else if (node == parent->left && parent == grand->right) {
                 // RL case
+                // printf("RL CASE: %d\n", * (int *) node->key);
+
+                // println("pre-rotate:");
+                // om_print_int_tree(tree);
                 __om_right_rotate(tree, parent);
+                // println("parent rotate:");
+                // om_print_int_tree(tree);
                 __om_left_rotate(tree, grand);
+                // println("grandparent rotate:");
+                // om_print_int_tree(tree);
+
                 bool grand_red = grand->is_red;
                 grand->is_red = node->is_red;
                 node->is_red = grand_red;
             } else {
                 // SHOULD BE UNREACHABLE.
-                error("oops");
+                error("unreachable code");
             }
+
+            break;
         }
     }
 
@@ -555,61 +570,80 @@ bool __om_delete_key(om_map_t *tree, void *key)
 
 // END remove
 
+// BEGIN traverse
+
+struct om_kv_pair_t {
+    void *key;
+    void *value;
+};
+typedef struct om_kv_pair_t om_kv_pair_t;
+
+typedef void *om_fold_func_t(om_node_t *node, void *acc);
+
+void *__om_get_keys_fold(om_node_t *node, void *acc)
+//@requires node != NULL;
+{
+    vec_t *vec = (vec_t *) acc;
+    v_append(vec, node->key);
+    return (void *) vec;
+}
+
+void *__om_get_values_fold(om_node_t *node, void *acc)
+//@requires node != NULL;
+{
+    vec_t *vec = (vec_t *) acc;
+    v_append(vec, node->value);
+    return (void *) vec;
+}
+
+void *__om_get_kv_pairs_fold(om_node_t *node, void *acc)
+//@requires node != NULL;
+{
+    vec_t *vec = (vec_t *) acc;
+    om_kv_pair_t *pair = alloc(om_kv_pair_t);
+    pair->key = node->key;
+    pair->value = node->value;
+    v_append(vec, (void *) pair);
+    return (void *) vec;
+}
+
+void *__om_fold_node(om_node_t *node, om_fold_func_t *func, void *acc) {
+    if (node == NULL) return acc;
+
+    acc = __om_fold_node(node->left, func, acc);
+    acc = (*func)(node, acc);
+    acc = __om_fold_node(node->right, func, acc);
+
+    return acc;
+}
+
+void *om_fold_tree(om_map_t *tree, om_fold_func_t *func, void *acc)
+//@requires __om_is_valid_tree(tree);
+{
+    return __om_fold_node(tree->root, func, acc);
+}
+
+vec_t *om_get_keys(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+{
+    vec_t *vec = v_create_vector();
+    return (vec_t *) om_fold_tree(tree, &__om_get_keys_fold, (void *) vec);
+}
+
+vec_t *om_get_values(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+{
+    vec_t *vec = v_create_vector();
+    return (vec_t *) om_fold_tree(tree, &__om_get_values_fold, (void *) vec);
+}
+
+// END traverse
+
 // BEGIN misc
 
 int __om_max_depth(om_node_t *node) {
     if (node == NULL) return 0;
     return max(__om_max_depth(node->left), __om_max_depth(node->right)) + 1;
-}
-
-int __om_collect_keys(om_node_t *node, void *[] output, int curr_idx)
-//@requires curr_idx <= \length(output);
-//@ensures \result >= curr_idx;
-{
-    int idx = curr_idx;
-    if (node == NULL) return idx;
-
-    idx = __om_collect_keys(node->left, output, idx);
-    output[idx] = node->key;
-    idx++;
-    idx = __om_collect_keys(node->right, output, idx);
-
-    return idx;
-}
-
-void *[] om_get_keys(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@ensures \length(\result) == tree->size;
-{
-    void *[] keys = alloc_array(void *, tree->size);
-    __om_collect_keys(tree->root, keys, 0);
-    return keys;
-}
-
-int[] om_get_keys_int(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@ensures \length(\result) == tree->size;
-{
-    void *[] keys = om_get_keys(tree);
-    int[] output = alloc_array(int, tree->size);
-    for (int i = 0; i < tree->size; i++) {
-        output[i] = * (int *) keys[i];
-    }
-
-    return output;
-}
-
-string[] om_get_keys_string(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@ensures \length(\result) == tree->size;
-{
-    void *[] keys = om_get_keys(tree);
-    string[] output = alloc_array(string, tree->size);
-    for (int i = 0; i < tree->size; i++) {
-        output[i] = * (string *) keys[i];
-    }
-
-    return output;
 }
 
 om_node_t *__om_copy_node(om_node_t *node, om_cpfunc_t *key, om_cpfunc_t *val)
@@ -728,7 +762,7 @@ void om_push_i(om_map_t *tree, int key)
 {
     int *key_ptr = alloc(int);
     *key_ptr = key;
-    __om_insert_kv_pair(tree, (void *) key_ptr, (void *) key_ptr);
+    __om_insert_kv_pair(tree, (void *) key_ptr, NULL);
 }
 
 int om_pop_min_i(om_map_t *tree)
@@ -738,7 +772,7 @@ int om_pop_min_i(om_map_t *tree)
 {
     om_node_t *min = __om_get_leftmost(tree->root);
     __om_delete_node(tree, min);
-    return * (int *) min->value;
+    return * (int *) min->key;
 }
 
 int om_pop_max_i(om_map_t *tree)
@@ -748,7 +782,7 @@ int om_pop_max_i(om_map_t *tree)
 {
     om_node_t *max = __om_get_rightmost(tree->root);
     __om_delete_node(tree, max);
-    return * (int *) max->value;
+    return * (int *) max->key;
 }
 
 int om_peek_min_i(om_map_t *tree)
@@ -756,7 +790,7 @@ int om_peek_min_i(om_map_t *tree)
 //@requires !om_empty(tree);
 {
     om_node_t *min = __om_get_leftmost(tree->root);
-    return * (int *) min->value;
+    return * (int *) min->key;
 }
 
 int om_peek_max_i(om_map_t *tree)
@@ -764,7 +798,7 @@ int om_peek_max_i(om_map_t *tree)
 //@requires !om_empty(tree);
 {
     om_node_t *max = __om_get_rightmost(tree->root);
-    return * (int *) max->value;
+    return * (int *) max->key;
 }
 
 // END queue shorthand
@@ -906,15 +940,15 @@ om_map_t *om_union(om_map_t *a, om_map_t *b)
 //@requires __om_is_valid_tree(b) && !b->allow_repeat;
 {
     om_map_t *union = om_create_map(a->cmp_func);
-    void *[] a_keys = om_get_keys(a);
-    void *[] b_keys = om_get_keys(b);
+    vec_t *a_keys = om_get_keys(a);
+    vec_t *b_keys = om_get_keys(b);
 
     for (int i = 0; i < om_size(a); i++) {
-        __om_insert_kv_pair(union, a_keys[i], NULL);
+        __om_insert_kv_pair(union, v_get(a_keys, i), NULL);
     }
 
     for (int i = 0; i < om_size(b); i++) {
-        __om_insert_kv_pair(union, b_keys[i], NULL);
+        __om_insert_kv_pair(union, v_get(b_keys, i), NULL);
     }
 
     return union;
@@ -922,68 +956,73 @@ om_map_t *om_union(om_map_t *a, om_map_t *b)
 
 // END set shorthand
 
+// BEGIN print whole tree
+
+void om_print_int_tree(om_map_t *tree) {
+    int depth = __om_max_depth(tree->root);
+    printf("\nPrinting tree with depth %d\n", depth);
+    om_node_t *[] curr = alloc_array(om_node_t *, 1 << (depth - 1));
+    om_node_t *[] next = alloc_array(om_node_t *, 1 << (depth - 1));
+    curr[0] = tree->root;
+
+    int width = 1;
+    for (int i = 0; i < depth; i++) {
+        printf("Depth %d: \n", i);
+        for (int j = 0; j < width; j++) {
+            om_node_t *node = curr[j];
+            if (node == NULL) {
+                printf(" <EMPTY> ");
+            } else {
+                printf("%d%c ", * (int *) node->key, node->is_red ? 'r' : 'b');
+
+                if (i != depth - 1) {
+                    next[j << 1] = node->left;
+                    next[(j << 1) + 1] = node->right;
+                }
+            }
+        }
+
+        println("");
+        width <<= 1;
+
+        if (i != depth - 1) {
+            for (int j = 0; j < width; j++) {
+                curr[j] = next[j];
+                next[j] = NULL;
+            }
+        }
+    }
+
+    println("");
+}
+
+// END print whole tree
+
 // int main() {
 //     om_map_t *tree = om_create_bst(&int_ptr_compare);
 
-//     om_push_i(tree, 15);
-//     om_push_i(tree, 8);
-//     om_push_i(tree, 20);
-//     om_push_i(tree, 4);
-//     om_push_i(tree, 12);
-//     om_push_i(tree, 18);
-//     om_push_i(tree, 25);
-//     om_push_i(tree, 2);
-//     om_push_i(tree, 6);
-//     om_push_i(tree, 10);
-//     om_push_i(tree, 14);
-//     om_push_i(tree, 16);
-//     om_push_i(tree, 22);
-//     om_push_i(tree, 28);
-//     om_push_i(tree, 1);
-//     om_push_i(tree, 5);
-//     om_push_i(tree, 9);
-//     om_push_i(tree, 13);
-//     om_push_i(tree, 19);
+//     for (int i = 0; i < 1000; i++) {
+//         om_push_i(tree, i);
+//     }
+
+//     for (int i = 1000; i > -1; i--) {
+//         om_push_i(tree, i);
+//     }
+
+//     printf("Height: %d\n", __om_max_depth(tree->root));
+//     printf("Black height: %d\n", __om_valid_node_height(tree->root));
+//     assert(__om_is_valid_tree(tree));
+
 //     om_push_i(tree, 24);
+//     om_push_i(tree, 24);
+//     om_push_i(tree, 22);
+//     om_push_i(tree, 30);
+//     om_push_i(tree, 29);
+//     om_push_i(tree, 28);
+//     om_push_i(tree, 27);
+//     om_push_i(tree, 28);
 
-//     om_map_t *copy = om_copy(tree, NULL, NULL);
-
-//     om_delete_i(copy, 15);
-//     om_delete_i(copy, 8);
-
-//     int[] keys;
-    
-//     print("A: ");
-//     keys = om_get_keys_int(tree);
-//     for (int i = 0; i < om_size(tree); i++) {
-//         printf("%d ", keys[i]);
-//     }
-//     println("");
-
-//     print("B: ");
-//     keys = om_get_keys_int(copy);
-//     for (int i = 0; i < om_size(copy); i++) {
-//         printf("%d ", keys[i]);
-//     }
-//     println("");
-
-//     // for (int i = 1000; i > -1; i--) {
-//     //     om_push_i(tree, i);
-//     //     if (i % 10000 == 0) printf("%d\n", i);
-//     // }
-
-//     // printf("Depth: %d\n", __om_max_depth(tree->root));
-
-//     // om_print_map(map);
-//     // printf("Side: %d\n", tree->size);
-//     // while (!om_empty(tree)) {
-//     //     printf("%d\n", om_pop_min_i(tree));
-//     // }
-//     // int[] keys = om_get_keys_int(tree);
-//     // for (int i = 0; i < tree->size; i++) {
-//     //     printf("%d ", keys[i]);
-//     // }
-//     // println("");
+//     om_print_int_tree(tree);
 
 //     return 0;
 // }
