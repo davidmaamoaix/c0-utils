@@ -35,8 +35,6 @@ struct om_map_t {
 };
 typedef struct om_map_t om_map_t;
 
-// END `om_node_t` definitions
-
 void om_print_int_tree(om_map_t *tree);
 
 // BEGIN contract functions
@@ -271,33 +269,26 @@ bool om_has_key(om_map_t *tree, void *key)
 
 // BEGIN insert
 
-// https://www.geeksforgeeks.org/insertion-in-red-black-tree/
-void __om_recolor_or_rotate(om_map_t *tree, om_node_t *node) {
+// https://pages.cs.wisc.edu/~cs400/readings/Red-Black-Trees/
+void __om_recolor_or_rotate(om_map_t *tree, om_node_t *node)
+//@ensures __om_is_valid_tree(tree);
+{
     while (node->parent != NULL && node->parent->is_red) {
         om_node_t *parent = node->parent;
         om_node_t *grand = parent->parent;
         //@assert grand != NULL; // since a red node cannot be root node
         //@assert parent == grand->left || parent == grand->right;
 
-        om_node_t *uncle = __om_get_uncle(node);
-        if (uncle != NULL && uncle->is_red) {
-            /*
-                - change parent and uncle to black
-                - repeat `__om_recolor_or_rotate` on grandfather
-            */
+        om_node_t *uncle = grand->left == parent ? grand->right : grand->left;
+        bool uncle_red = uncle != NULL && uncle->is_red;
+
+        if (uncle_red) {
             parent->is_red = false;
             uncle->is_red = false;
             grand->is_red = true;
             node = grand;
         } else {
-            /*
-                four possible cases:
-                - LL rotation
-                - LR rotation
-                - RR rotation
-                - RL rotation
-            */
-
+            // 4 cases for rotation
             if (node == parent->left && parent == grand->left) {
                 // LL case
                 __om_right_rotate(tree, grand);
@@ -322,26 +313,18 @@ void __om_recolor_or_rotate(om_map_t *tree, om_node_t *node) {
 
             } else if (node == parent->left && parent == grand->right) {
                 // RL case
-                // printf("RL CASE: %d\n", * (int *) node->key);
-
-                // println("pre-rotate:");
-                // om_print_int_tree(tree);
                 __om_right_rotate(tree, parent);
-                // println("parent rotate:");
-                // om_print_int_tree(tree);
                 __om_left_rotate(tree, grand);
-                // println("grandparent rotate:");
-                // om_print_int_tree(tree);
-
                 bool grand_red = grand->is_red;
                 grand->is_red = node->is_red;
                 node->is_red = grand_red;
+
             } else {
-                // SHOULD BE UNREACHABLE.
+                // SHOULD BE UNREACHABLE
                 error("unreachable code");
             }
 
-            break;
+            return; // nothing left to do after rotation & recoloring
         }
     }
 
@@ -999,20 +982,28 @@ void om_print_int_tree(om_map_t *tree) {
 
 // END print whole tree
 
-// int main() {
-//     om_map_t *tree = om_create_bst(&int_ptr_compare);
-//     rand_t r = init_rand (69);
+int main() {
+    om_map_t *tree = om_create_bst(&int_ptr_compare);
+    // rand_t r = init_rand (69);
 
-//     for (int i = 0; i < 10000; i++) {
-//         om_push_i(tree, rand(r) % 30);
-//     }
+    // for (int i = 0; i < 100; i++) {
+    //     om_push_i(tree, rand(r) % 30);
+    // }
 
-//     for (int i = 0; i < 10000; i++) {
-//         om_delete_i(tree, rand(r) % 30);
-//     }
+    // for (int i = 0; i < 100; i++) {
+    //     om_delete_i(tree, rand(r) % 30);
+    // }
 
-//     assert(__om_is_valid_tree(tree));
-//     om_print_int_tree(tree);
+    // assert(__om_is_valid_tree(tree));
 
-//     return 0;
-// }
+    om_push_i(tree, 24);
+    om_push_i(tree, 24);
+    om_push_i(tree, 22);
+    om_push_i(tree, 30);
+    om_push_i(tree, 29);
+    om_push_i(tree, 28);
+    om_push_i(tree, 27);
+    om_push_i(tree, 26);
+
+    return 0;
+}
