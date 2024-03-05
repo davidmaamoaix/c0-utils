@@ -1,6 +1,7 @@
 #use <conio>
 #use <string>
 #use <util>
+#use <rand>
 
 /*
     This file contains a ordered map implemented with red-black tree.
@@ -1000,28 +1001,17 @@ void om_print_int_tree(om_map_t *tree) {
 
 // int main() {
 //     om_map_t *tree = om_create_bst(&int_ptr_compare);
+//     rand_t r = init_rand (69);
 
-//     for (int i = 0; i < 1000; i++) {
-//         om_push_i(tree, i);
+//     for (int i = 0; i < 10000; i++) {
+//         om_push_i(tree, rand(r) % 30);
 //     }
 
-//     for (int i = 1000; i > -1; i--) {
-//         om_push_i(tree, i);
+//     for (int i = 0; i < 10000; i++) {
+//         om_delete_i(tree, rand(r) % 30);
 //     }
 
-//     printf("Height: %d\n", __om_max_depth(tree->root));
-//     printf("Black height: %d\n", __om_valid_node_height(tree->root));
 //     assert(__om_is_valid_tree(tree));
-
-//     om_push_i(tree, 24);
-//     om_push_i(tree, 24);
-//     om_push_i(tree, 22);
-//     om_push_i(tree, 30);
-//     om_push_i(tree, 29);
-//     om_push_i(tree, 28);
-//     om_push_i(tree, 27);
-//     om_push_i(tree, 28);
-
 //     om_print_int_tree(tree);
 
 //     return 0;
