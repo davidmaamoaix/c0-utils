@@ -147,33 +147,6 @@ int string_ptr_compare(void *a, void *b)
 
 // END default comparators
 
-// BEGIN constructor
-
-om_map_t *om_create_map(key_cmp_t *func)
-//@ensures __om_is_valid_tree(\result);
-{
-    om_map_t *map = alloc(om_map_t);
-    map->size = 0;
-    map->root = NULL;
-    map->cmp_func = func;
-    map->allow_repeat = false;
-    return map;
-}
-
-om_map_t *om_create_bst(key_cmp_t *func)
-//@ensures __om_is_valid_tree(\result);
-{
-    om_map_t *map = alloc(om_map_t);
-
-    map->size = 0;
-    map->root = NULL;
-    map->cmp_func = func;
-    map->allow_repeat = true;
-    return map;
-}
-
-// END constructor
-
 // BEGIN rotations
 
 void __om_left_rotate(om_map_t *tree, om_node_t *node)
@@ -591,26 +564,6 @@ void *__om_fold_node(om_node_t *node, om_fold_func_t *func, void *acc) {
     return acc;
 }
 
-void *om_fold_tree(om_map_t *tree, om_fold_func_t *func, void *acc)
-//@requires __om_is_valid_tree(tree);
-{
-    return __om_fold_node(tree->root, func, acc);
-}
-
-vec_t *om_get_keys(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-{
-    vec_t *vec = v_create_vector();
-    return (vec_t *) om_fold_tree(tree, &__om_get_keys_fold, (void *) vec);
-}
-
-vec_t *om_get_values(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-{
-    vec_t *vec = v_create_vector();
-    return (vec_t *) om_fold_tree(tree, &__om_get_values_fold, (void *) vec);
-}
-
 // END traverse
 
 // BEGIN misc
@@ -641,23 +594,6 @@ om_node_t *__om_copy_node(om_node_t *node, om_cpfunc_t *key, om_cpfunc_t *val)
 }
 
 void *__om_no_copy(void *val) { return val; }
-
-om_map_t *om_copy(om_map_t *tree, om_cpfunc_t *key_func, om_cpfunc_t *val_func)
-//@requires __om_is_valid_tree(tree);
-//@ensures __om_is_valid_tree(\result);
-{
-    om_map_t *res = alloc(om_map_t);
-    res->allow_repeat = tree->allow_repeat;
-    res->cmp_func = tree->cmp_func;
-    res->size = tree->size;
-
-    if (key_func == NULL) key_func = &__om_no_copy;
-    if (val_func == NULL) val_func = &__om_no_copy;
-
-    res->root = __om_copy_node(tree->root, key_func, val_func);
-
-    return res;
-}
 
 // END misc
 
@@ -712,70 +648,32 @@ void om_print_map(om_map_t *tree)
 
 // END debug
 
-// BEGIN size
+// BEGIN inteface: constructor
 
-int om_size(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
+om_map_t *om_create_map(key_cmp_t *func)
+//@ensures __om_is_valid_tree(\result);
 {
-    return tree->size;
+    om_map_t *map = alloc(om_map_t);
+    map->size = 0;
+    map->root = NULL;
+    map->cmp_func = func;
+    map->allow_repeat = false;
+    return map;
 }
 
-bool om_empty(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
+om_map_t *om_create_bst(key_cmp_t *func)
+//@ensures __om_is_valid_tree(\result);
 {
-    return tree->size == 0;
+    om_map_t *map = alloc(om_map_t);
+
+    map->size = 0;
+    map->root = NULL;
+    map->cmp_func = func;
+    map->allow_repeat = true;
+    return map;
 }
 
-// END size
-
-// BEGIN queue shorthand
-
-void om_push_i(om_map_t *tree, int key)
-//@requires __om_is_valid_tree(tree);
-//@ensures __om_is_valid_tree(tree);
-{
-    int *key_ptr = alloc(int);
-    *key_ptr = key;
-    __om_insert_kv_pair(tree, (void *) key_ptr, NULL);
-}
-
-int om_pop_min_i(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@requires !om_empty(tree);
-//@ensures __om_is_valid_tree(tree);
-{
-    om_node_t *min = __om_get_leftmost(tree->root);
-    __om_delete_node(tree, min);
-    return * (int *) min->key;
-}
-
-int om_pop_max_i(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@requires !om_empty(tree);
-//@ensures __om_is_valid_tree(tree);
-{
-    om_node_t *max = __om_get_rightmost(tree->root);
-    __om_delete_node(tree, max);
-    return * (int *) max->key;
-}
-
-int om_peek_min_i(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@requires !om_empty(tree);
-{
-    om_node_t *min = __om_get_leftmost(tree->root);
-    return * (int *) min->key;
-}
-
-int om_peek_max_i(om_map_t *tree)
-//@requires __om_is_valid_tree(tree);
-//@requires !om_empty(tree);
-{
-    om_node_t *max = __om_get_rightmost(tree->root);
-    return * (int *) max->key;
-}
-
-// END queue shorthand
+// END inteface: constructor
 
 // BEGIN structured print
 
@@ -818,6 +716,156 @@ void om_print_int_tree(om_map_t *tree) {
 }
 
 // END structured print
+
+// BEGIN interface: tree manipulation
+
+int om_size(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+{
+    return tree->size;
+}
+
+bool om_empty(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+{
+    return tree->size == 0;
+}
+
+void om_add(om_map_t *tree, void *key)
+//@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    __om_insert_kv_pair(tree, key, NULL);
+}
+
+void om_add_i(om_map_t *tree, int key)
+//@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    int *key_ptr = alloc(int);
+    *key_ptr = key;
+    om_add(tree, (void *) key_ptr);
+}
+
+void om_add_s(om_map_t *tree, string key)
+//@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    string *key_ptr = alloc(string);
+    *key_ptr = key;
+    om_add(tree, (void *) key_ptr);
+}
+
+om_map_t *om_copy(om_map_t *tree, om_cpfunc_t *key_func, om_cpfunc_t *val_func)
+//@requires __om_is_valid_tree(tree);
+//@ensures __om_is_valid_tree(\result);
+{
+    om_map_t *res = alloc(om_map_t);
+    res->allow_repeat = tree->allow_repeat;
+    res->cmp_func = tree->cmp_func;
+    res->size = tree->size;
+
+    if (key_func == NULL) key_func = &__om_no_copy;
+    if (val_func == NULL) val_func = &__om_no_copy;
+
+    res->root = __om_copy_node(tree->root, key_func, val_func);
+
+    return res;
+}
+
+// END interface: tree manipulation
+
+// BEGIN interface: traverse
+
+void *om_fold_tree(om_map_t *tree, om_fold_func_t *func, void *acc)
+//@requires __om_is_valid_tree(tree);
+{
+    return __om_fold_node(tree->root, func, acc);
+}
+
+vec_t *om_get_keys(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+{
+    vec_t *vec = v_create_vector();
+    return (vec_t *) om_fold_tree(tree, &__om_get_keys_fold, (void *) vec);
+}
+
+vec_t *om_get_values(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+{
+    vec_t *vec = v_create_vector();
+    return (vec_t *) om_fold_tree(tree, &__om_get_values_fold, (void *) vec);
+}
+
+// END interface: traverse
+
+// BEGIN interface: priority queue
+
+void *om_pop_min(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    om_node_t *min = __om_get_leftmost(tree->root);
+    __om_delete_node(tree, min);
+    return min->key;
+}
+
+void *om_pop_max(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    om_node_t *max = __om_get_rightmost(tree->root);
+    __om_delete_node(tree, max);
+    return max->key;
+}
+
+void *om_peek_min(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+{
+    return __om_get_leftmost(tree->root)->key;
+}
+
+void *om_peek_max(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+{
+    return __om_get_rightmost(tree->root)->key;
+}
+
+int om_pop_min_i(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    return * (int *) om_pop_min(tree);
+}
+
+int om_pop_max_i(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+//@ensures __om_is_valid_tree(tree);
+{
+    return * (int *) om_pop_max(tree);
+}
+
+int om_peek_min_i(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+{
+    return * (int *) om_peek_min(tree);
+}
+
+int om_peek_max_i(om_map_t *tree)
+//@requires __om_is_valid_tree(tree);
+//@requires !om_empty(tree);
+{
+    return * (int *) om_peek_max(tree);
+}
+
+// END interface: priority queue
 
 // BEGIN interface: BST
 
@@ -1008,14 +1056,14 @@ int main() {
 
     // assert(__om_is_valid_tree(tree));
 
-    om_push_i(tree, 24);
-    om_push_i(tree, 24);
-    om_push_i(tree, 22);
-    om_push_i(tree, 30);
-    om_push_i(tree, 29);
-    om_push_i(tree, 28);
-    om_push_i(tree, 27);
-    om_push_i(tree, 26);
+    om_add_i(tree, 24);
+    om_add_i(tree, 24);
+    om_add_i(tree, 22);
+    om_add_i(tree, 30);
+    om_add_i(tree, 29);
+    om_add_i(tree, 28);
+    om_add_i(tree, 27);
+    om_add_i(tree, 26);
 
     return 0;
 }
