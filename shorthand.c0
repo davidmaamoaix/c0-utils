@@ -1,7 +1,0 @@
-/*
-    Various shorthands for features that should be in C0.
- */
-
-bool xor(bool a, bool b) {
-    return (a || b) && !(a && b);
-}
