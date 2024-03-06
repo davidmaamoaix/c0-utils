@@ -1,7 +1,7 @@
 CC=cc0
 CFLAGS=-d -w -x
 
-SRC=vector.c1 ordered_map.c1 regex.c1
+SRC=shorthand.c0 vector.c1 ordered_map.c1 regex.c1
 INIT=README.txt
 
 .PHONY: clean init all
