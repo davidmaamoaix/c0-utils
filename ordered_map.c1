@@ -1042,28 +1042,28 @@ om_map_t *om_union(om_map_t *a, om_map_t *b)
 
 // END interface: ordered set
 
-int main() {
-    om_map_t *tree = om_create_bst(&int_ptr_compare);
-    // rand_t r = init_rand (69);
+// int main() {
+//     om_map_t *tree = om_create_bst(&int_ptr_compare);
+//     // rand_t r = init_rand (69);
 
-    // for (int i = 0; i < 100; i++) {
-    //     om_push_i(tree, rand(r) % 30);
-    // }
+//     // for (int i = 0; i < 100; i++) {
+//     //     om_push_i(tree, rand(r) % 30);
+//     // }
 
-    // for (int i = 0; i < 100; i++) {
-    //     om_delete_i(tree, rand(r) % 30);
-    // }
+//     // for (int i = 0; i < 100; i++) {
+//     //     om_delete_i(tree, rand(r) % 30);
+//     // }
 
-    // assert(__om_is_valid_tree(tree));
+//     // assert(__om_is_valid_tree(tree));
 
-    om_add_i(tree, 24);
-    om_add_i(tree, 24);
-    om_add_i(tree, 22);
-    om_add_i(tree, 30);
-    om_add_i(tree, 29);
-    om_add_i(tree, 28);
-    om_add_i(tree, 27);
-    om_add_i(tree, 26);
+//     om_add_i(tree, 24);
+//     om_add_i(tree, 24);
+//     om_add_i(tree, 22);
+//     om_add_i(tree, 30);
+//     om_add_i(tree, 29);
+//     om_add_i(tree, 28);
+//     om_add_i(tree, 27);
+//     om_add_i(tree, 26);
 
-    return 0;
-}
+//     return 0;
+// }
